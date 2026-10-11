@@ -474,13 +474,37 @@ const STORE = "entries";
 let dbPromise;
 function db() {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "date" });
-    req.onsuccess = () => resolve(req.result);
+    const req = indexedDB.open(DB_NAME, 2);
+    req.onupgradeneeded = (ev) => {
+      if (ev.oldVersion < 1) req.result.createObjectStore(STORE, { keyPath: "date" });
+      if (ev.oldVersion === 1) migrateAnxiety(req.transaction.objectStore(STORE));
+    };
+    // An older tab still holding the database open would stall the upgrade.
+    req.onblocked = () => setStatus("Close other Undercurrent tabs to finish updating.", "error");
+    req.onsuccess = () => {
+      const database = req.result;
+      // Let a newer version of the app upgrade the database: step aside and reload.
+      database.onversionchange = () => { database.close(); location.reload(); };
+      resolve(database);
+    };
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
 }
+// v2: anxiety moved from 1–5 to 0–4, so "calm" is 0.
+function migrateAnxiety(objectStore) {
+  objectStore.openCursor().onsuccess = (e) => {
+    const cursor = e.target.result;
+    if (!cursor) return;
+    const entry = cursor.value;
+    if (Number.isInteger(entry.anxiety) && entry.anxiety >= 1 && entry.anxiety <= 5) {
+      entry.anxiety -= 1;
+      cursor.update(entry);
+    }
+    cursor.continue();
+  };
+}
+
 async function tx(mode, fn) {
   const database = await db();
   return new Promise((resolve, reject) => {
@@ -511,19 +535,22 @@ const $ = (id) => document.getElementById(id);
 const textEl = $("text");
 
 /* ---------- check-in ---------- */
-const MOOD_WORDS = [null, "Very low", "Low", "Okay", "Good", "Great"];
-const ANXIETY_WORDS = [null, "Calm", "Mild", "Moderate", "High", "Severe"];
+const MOOD_WORDS = [null, "Very low", "Low", "Okay", "Good", "Great"]; // 1–5
+const ANXIETY_WORDS = ["Calm", "Mild", "Moderate", "High", "Severe"]; // 0–4: calm is no anxiety
 const FACTORS = ["Sleep", "Work", "Money", "Health", "Family", "Friends", "Partner", "Exercise", "Outdoors", "Alone time", "Screens", "News"];
 const WORDS = { mood: MOOD_WORDS, anxiety: ANXIETY_WORDS };
+const RANGE = { mood: [1, 5], anxiety: [0, 4] };
 
-const validLevel = (n) => (Number.isInteger(n) && n >= 1 && n <= 5 ? n : null);
+const validLevel = (field, n) => (Number.isInteger(n) && n >= RANGE[field][0] && n <= RANGE[field][1] ? n : null);
 // One shape for every entry, whether it came from this version, an older one, or a backup.
-function normalize(e) {
+// Backups before version 2 stored anxiety as 1–5.
+function normalize(e, { legacyAnxiety = false } = {}) {
+  const anxiety = legacyAnxiety && Number.isInteger(e.anxiety) ? e.anxiety - 1 : e.anxiety;
   return {
     date: e.date,
     text: typeof e.text === "string" ? e.text : "",
-    mood: validLevel(e.mood),
-    anxiety: validLevel(e.anxiety),
+    mood: validLevel("mood", e.mood),
+    anxiety: validLevel("anxiety", anxiety),
     factors: Array.isArray(e.factors) ? [...new Set(e.factors.filter((f) => typeof f === "string" && f.length <= 40))] : [],
     createdAt: Number(e.createdAt) || Date.now(),
     updatedAt: Number(e.updatedAt) || 0,
@@ -779,7 +806,7 @@ function renderStats() {
 function checkinSummary(e) {
   const parts = [];
   if (e.mood) parts.push(`Mood: ${MOOD_WORDS[e.mood].toLowerCase()}`);
-  if (e.anxiety) parts.push(`Anxiety: ${ANXIETY_WORDS[e.anxiety].toLowerCase()}`);
+  if (e.anxiety != null) parts.push(`Anxiety: ${ANXIETY_WORDS[e.anxiety].toLowerCase()}`);
   if (e.factors.length) parts.push(e.factors.join(", "));
   return parts.join(" · ") || "Checked in";
 }
@@ -788,14 +815,15 @@ function buildCheckin() {
   for (const scale of document.querySelectorAll(".scale")) {
     const field = scale.dataset.field;
     const opts = scale.querySelector(".scale-opts");
-    for (let n = 1; n <= 5; n++) {
+    const [min, max] = RANGE[field];
+    for (let n = min; n <= max; n++) {
       const b = document.createElement("button");
       b.type = "button";
       b.setAttribute("role", "radio");
       b.dataset.value = n;
       b.textContent = n;
       b.title = WORDS[field][n];
-      b.setAttribute("aria-label", `${WORDS[field][n]} (${n} of 5)`);
+      b.setAttribute("aria-label", `${WORDS[field][n]} (${n}, on a scale of ${min} to ${max})`);
       opts.append(b);
     }
   }
@@ -816,12 +844,12 @@ function renderCheckin() {
       const on = Number(b.dataset.value) === value;
       b.setAttribute("aria-checked", String(on));
       // roving tabindex: one tab stop per scale, arrows move within it
-      b.tabIndex = on || (value == null && b.dataset.value === "1") ? 0 : -1;
+      b.tabIndex = on || (value == null && Number(b.dataset.value) === RANGE[field][0]) ? 0 : -1;
     });
-    scale.querySelector(".scale-word").textContent = value ? WORDS[field][value] : "";
+    scale.querySelector(".scale-word").textContent = value != null ? WORDS[field][value] : "";
   }
   $("factors").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(draft.factors.includes(b.dataset.factor))));
-  $("care-note").hidden = !(draft.mood === 1 || draft.anxiety === 5);
+  $("care-note").hidden = !(draft.mood === 1 || draft.anxiety === 4);
 }
 
 function setLevel(field, value) {
@@ -841,7 +869,8 @@ document.querySelectorAll(".scale-opts").forEach((opts) => {
     const step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
     if (!step) return;
     e.preventDefault();
-    const next = Math.min(5, Math.max(1, (draft[field] ?? (step > 0 ? 0 : 6)) + step));
+    const [min, max] = RANGE[field];
+    const next = Math.min(max, Math.max(min, (draft[field] ?? (step > 0 ? min - 1 : max + 1)) + step));
     draft[field] = next;
     renderCheckin();
     scheduleSave(150);
@@ -933,7 +962,7 @@ function renderTrends() {
     </div>
     <div class="chart-block">
       <h3><span class="key anxiety"></span>Anxiety</h3>
-      <div class="sub">1 calm · 5 severe</div>
+      <div class="sub">0 calm · 4 severe</div>
       <div class="chart" id="chart-anxiety" tabindex="0" role="img" aria-label="Anxiety over the last ${period}. Use left and right arrow keys to read each day."></div>
     </div>
     ${patternsHtml(keys)}
@@ -945,7 +974,7 @@ function renderTrends() {
 // A quiet nudge when recent check-ins have been hard. Describes, never diagnoses.
 function gentleCheck() {
   const recent = rangeKeys(14).map((k) => entries.get(k)).filter(hasCheckin);
-  const hard = recent.filter((e) => (e.mood != null && e.mood <= 2) || (e.anxiety != null && e.anxiety >= 4)).length;
+  const hard = recent.filter((e) => (e.mood != null && e.mood <= 2) || (e.anxiety != null && e.anxiety >= 3)).length;
   if (hard < 5) return "";
   return `<div class="gentle">You've logged <b>${hard} hard days</b> in the last two weeks. That's a lot to carry.
     Talking it through with someone you trust, or a professional, can really help —
@@ -985,7 +1014,7 @@ function patternsHtml(keys) {
 
 function tableHtml(days) {
   const rows = [...days].reverse().map(({ key, e }) => `<tr><td>${escapeHtml(fromKey(key).toLocaleDateString(undefined, { month: "short", day: "numeric", weekday: "short" }))}</td>
-    <td>${e.mood ? `${e.mood} · ${MOOD_WORDS[e.mood]}` : "—"}</td><td>${e.anxiety ? `${e.anxiety} · ${ANXIETY_WORDS[e.anxiety]}` : "—"}</td>
+    <td>${e.mood ? `${e.mood} · ${MOOD_WORDS[e.mood]}` : "—"}</td><td>${e.anxiety != null ? `${e.anxiety} · ${ANXIETY_WORDS[e.anxiety]}` : "—"}</td>
     <td>${escapeHtml(e.factors.join(", ")) || "—"}</td></tr>`).join("");
   return `<details class="data-table"><summary>Show as a table</summary><div class="scroll"><table>
     <thead><tr><th>Day</th><th>Mood</th><th>Anxiety</th><th>Affecting you</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
@@ -1007,7 +1036,7 @@ function drawCharts(keys) {
   const W = Math.max(280, charts[0].host.clientWidth || 600), H = 150;
   const m = { l: 26, r: 10, t: 10, b: 24 };
   const x = (i) => m.l + (keys.length === 1 ? 0 : (i / (keys.length - 1)) * (W - m.l - m.r));
-  const y = (v) => m.t + ((5 - v) / 4) * (H - m.t - m.b);
+  const yFor = (field) => { const [lo, hi] = RANGE[field]; return (v) => m.t + ((hi - v) / (hi - lo)) * (H - m.t - m.b); };
   const MAX_GAP = 3; // connect check-ins up to 3 days apart; longer gaps break the line
 
   // x-axis ticks: a handful of evenly spaced dates
@@ -1019,9 +1048,11 @@ function drawCharts(keys) {
   for (const c of charts) {
     c.host.innerHTML = "";
     const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, "aria-hidden": "true" }, c.host);
-    for (const v of [1, 2, 3, 4, 5]) {
+    const [lo, hi] = RANGE[c.field];
+    const y = c.y = yFor(c.field);
+    for (let v = lo; v <= hi; v++) {
       svgEl("line", { class: "grid", x1: m.l, x2: W - m.r, y1: y(v), y2: y(v) }, svg);
-      if (v % 2) svgEl("text", { class: "axis-text", x: m.l - 8, y: y(v) + 4, "text-anchor": "end" }, svg).textContent = v;
+      if ((v - lo) % 2 === 0) svgEl("text", { class: "axis-text", x: m.l - 8, y: y(v) + 4, "text-anchor": "end" }, svg).textContent = v;
     }
     for (const i of ticks) {
       const anchor = i === 0 ? "start" : i === keys.length - 1 ? "end" : "middle";
@@ -1061,7 +1092,7 @@ function drawCharts(keys) {
     const d = checked[idx], c = charts[0];
     c.tip.innerHTML = `<b>${escapeHtml(longDate(d.k))}</b>
       <div class="row"><span class="key mood"></span>Mood <span>${d.e.mood ? MOOD_WORDS[d.e.mood] : "—"}</span></div>
-      <div class="row"><span class="key anxiety"></span>Anxiety <span>${d.e.anxiety ? ANXIETY_WORDS[d.e.anxiety] : "—"}</span></div>
+      <div class="row"><span class="key anxiety"></span>Anxiety <span>${d.e.anxiety != null ? ANXIETY_WORDS[d.e.anxiety] : "—"}</span></div>
       ${d.e.factors.length ? `<div class="row">${escapeHtml(d.e.factors.join(", "))}</div>` : ""}`;
     c.tip.hidden = false;
     const scale = c.host.clientWidth / W;
@@ -1128,7 +1159,7 @@ async function exportData() {
   if (dirty) await saveNow();
   const data = {
     app: "undercurrent",
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     entries: [...entries.values()].sort((a, b) => a.date.localeCompare(b.date)),
   };
@@ -1149,7 +1180,7 @@ async function importData(file) {
   let added = 0, updated = 0, skipped = 0;
   for (const e of data.entries) {
     if (typeof e?.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(e.date)) { skipped++; continue; }
-    const incoming = normalize(e);
+    const incoming = normalize(e, { legacyAnxiety: !(data.version >= 2) });
     if (isBlank(incoming.text, incoming)) { skipped++; continue; }
     const existing = entries.get(e.date);
     if (existing && existing.updatedAt >= incoming.updatedAt) { skipped++; continue; }

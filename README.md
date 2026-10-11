@@ -9,7 +9,7 @@ A private journal for noticing your mood, anxiety, and what's going on underneat
 ## What it does
 
 - **One entry a day** — a calm, distraction-free writing space with a gentle prompt when you're not sure where to start.
-- **Daily check-in** — rate your mood and anxiety from 1 to 5 and tag what's affecting you (sleep, work, family…). A check-in counts on its own, even on days you don't feel like writing.
+- **Daily check-in** — rate your mood (1 very low to 5 great) and anxiety (0 calm to 4 severe), and tag what's affecting you (sleep, work, family…). A check-in counts on its own, even on days you don't feel like writing.
 - **Trends** — average mood and anxiety compared with the previous period, charts over 2 weeks to a year, and **patterns** like "on days you tagged Sleep, anxiety was higher." Every chart has a table view and can be read with the keyboard.
 - **Autosave** — every few keystrokes, so nothing is lost if you close the tab.
 - **Timeline & search** — browse past days by month, or search everything you've written.

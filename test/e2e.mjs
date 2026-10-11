@@ -244,6 +244,24 @@ await test("a very low mood shows a gentle support note", async () => {
   assert(await p2.isVisible("#care-note"), "shown for very low mood");
   await p2.click(scaleBtn("mood", 3));
   assert(await p2.isHidden("#care-note"), "hidden again");
+  await p2.click(scaleBtn("anxiety", 4));
+  assert(await p2.isVisible("#care-note"), "shown for severe anxiety");
+  await p2.click(scaleBtn("anxiety", 4));
+  await saved2();
+});
+
+await test("anxiety runs from 0 (calm) to 4 (severe), and calm is a real answer", async () => {
+  const values = await p2.$$eval('.scale[data-field="anxiety"] button', (els) => els.map((e) => e.dataset.value + " " + e.title));
+  assert(values.join("|") === "0 Calm|1 Mild|2 Moderate|3 High|4 Severe", values.join("|"));
+  await p2.click(scaleBtn("anxiety", 0));
+  assert((await p2.textContent('.scale[data-field="anxiety"] .scale-word')) === "Calm", "word");
+  await saved2();
+  await p2.reload();
+  await p2.waitForSelector(`${scaleBtn("anxiety", 0)}[aria-checked="true"]`);
+  assert((await p2.textContent('.scale[data-field="anxiety"] .scale-word')) === "Calm", "calm survives a reload");
+  const preview = await p2.textContent(`.entry-btn[data-date="${today}"]`);
+  assert(preview.includes("Anxiety: calm"), "list: " + preview);
+  await p2.click(scaleBtn("anxiety", 0)); // clear it again
   await saved2();
 });
 
@@ -266,7 +284,7 @@ for (let i = 0; i < 30; i++) {
 sample.push({ date: "2025-01-01", text: "Old entry with no check-in", createdAt: 1, updatedAt: 1 });
 const sampleFile = join(shots, "sample.json");
 await writeFile(sampleFile, JSON.stringify({ app: "undercurrent", version: 1, entries: sample }));
-const inRange = sample.filter((e) => e.mood);
+const inRange = sample.filter((e) => e.mood).map((e) => ({ ...e, anxiety: e.anxiety - 1 })); // v1 backup -> 0–4
 const avg = (xs) => (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(1);
 
 await test("imports check-ins (and old entries without them)", async () => {
@@ -296,12 +314,12 @@ await test("both charts draw a dot per check-in", async () => {
 
 await test("patterns describe the Sleep difference without claiming a cause", async () => {
   const text = await p2.textContent(".patterns");
-  assert(/tagged Sleep, mood was lower \(2\.0 vs 4\.0\) and anxiety was higher \(4\.0 vs 2\.0\)/.test(text), text);
+  assert(/tagged Sleep, mood was lower \(2\.0 vs 4\.0\) and anxiety was higher \(3\.0 vs 1\.0\)/.test(text), text);
   assert(text.includes("not causes"), "caveat");
 });
 
 await test("hard days trigger the gentle note", async () => {
-  const hard = inRange.filter((e) => fromKeyDays(e.date) < 14 && (e.mood <= 2 || e.anxiety >= 4)).length;
+  const hard = inRange.filter((e) => fromKeyDays(e.date) < 14 && (e.mood <= 2 || e.anxiety >= 3)).length;
   const shown = await p2.isVisible(".gentle");
   assert(shown === hard >= 5, `hard=${hard} shown=${shown}`);
 });
@@ -348,6 +366,56 @@ await test("opening a day from the list returns to the journal", async () => {
   assert(opacity === "1", "editor fully visible right away, opacity " + opacity);
 });
 await p2.screenshot({ path: join(shots, "checkin.png") });
+
+await test("upgrading an existing database moves anxiety to 0–4", async () => {
+  const ctx = await browser.newContext();
+  const pg = await ctx.newPage();
+  await pg.goto(url + "manifest.json"); // same origin, without the app running
+  await pg.evaluate((date) => new Promise((resolve, reject) => {
+    const req = indexedDB.open("undercurrent", 1); // the step-1/2 schema
+    req.onupgradeneeded = () => req.result.createObjectStore("entries", { keyPath: "date" });
+    req.onsuccess = () => {
+      const t = req.result.transaction("entries", "readwrite");
+      t.objectStore("entries").put({ date, text: "old scale", mood: 3, anxiety: 2, factors: [], createdAt: 1, updatedAt: 1 });
+      t.objectStore("entries").put({ date: "2026-01-02", text: "no check-in", createdAt: 1, updatedAt: 1 });
+      t.oncomplete = () => { req.result.close(); resolve(); };
+      t.onerror = () => reject(t.error);
+    };
+  }), today);
+  await pg.goto(url);
+  await pg.waitForSelector(`${scaleBtn("anxiety", 1)}[aria-checked="true"]`);
+  assert((await pg.textContent('.scale[data-field="anxiety"] .scale-word')) === "Mild", "old 2 (Mild) is still Mild");
+  const stored = await pg.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open("undercurrent");
+    req.onsuccess = () => {
+      const all = req.result.transaction("entries").objectStore("entries").getAll();
+      all.onsuccess = () => resolve({ version: req.result.version, rows: all.result.map((e) => e.anxiety ?? null) });
+    };
+  }));
+  assert(stored.version === 2, "db version " + stored.version);
+  assert(JSON.stringify(stored.rows.sort()) === JSON.stringify([1, null].sort()), "stored: " + JSON.stringify(stored.rows));
+  await ctx.close();
+});
+
+await test("new backups are version 2 and import without shifting", async () => {
+  const ctx = await browser.newContext({ acceptDownloads: true });
+  const pg = await ctx.newPage();
+  await pg.goto(url);
+  await pg.click(scaleBtn("anxiety", 0));
+  await pg.waitForFunction(() => document.querySelector("#status").textContent.startsWith("Saved"));
+  await pg.click("#open-settings");
+  const [download] = await Promise.all([pg.waitForEvent("download"), pg.click("#export")]);
+  const backup = JSON.parse(await readFile(await download.path(), "utf8"));
+  assert(backup.version === 2 && backup.entries[0].anxiety === 0, JSON.stringify(backup.entries[0]));
+  await pg.click("#close-settings");
+  await pg.click(scaleBtn("anxiety", 0)); // clear, then restore from the backup
+  await pg.waitForFunction(() => document.querySelector("#status").textContent === "Not written yet");
+  const file = join(shots, "v2.json");
+  await writeFile(file, JSON.stringify(backup));
+  await pg.setInputFiles("#import-file", file);
+  await pg.waitForSelector(`${scaleBtn("anxiety", 0)}[aria-checked="true"]`);
+  await ctx.close();
+});
 
 const phone2 = await (await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })).newPage();
 phone2.on("pageerror", (e) => errors.push(e.message));
