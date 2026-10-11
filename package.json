@@ -1,0 +1,12 @@
+{
+  "name": "undercurrent",
+  "private": true,
+  "description": "Dev-only: browser tests. The app itself has no build step or dependencies.",
+  "type": "module",
+  "scripts": {
+    "test": "node test/e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.50.0"
+  }
+}
