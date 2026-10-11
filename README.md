@@ -9,6 +9,8 @@ A private journal for noticing your mood, anxiety, and what's going on underneat
 ## What it does
 
 - **One entry a day** — a calm, distraction-free writing space with a gentle prompt when you're not sure where to start.
+- **Daily check-in** — rate your mood and anxiety from 1 to 5 and tag what's affecting you (sleep, work, family…). A check-in counts on its own, even on days you don't feel like writing.
+- **Trends** — average mood and anxiety compared with the previous period, charts over 2 weeks to a year, and **patterns** like "on days you tagged Sleep, anxiety was higher." Every chart has a table view and can be read with the keyboard.
 - **Autosave** — every few keystrokes, so nothing is lost if you close the tab.
 - **Timeline & search** — browse past days by month, or search everything you've written.
 - **Read mode** — entries support light Markdown (headings, **bold**, *italic*, lists, quotes).
@@ -17,7 +19,7 @@ A private journal for noticing your mood, anxiety, and what's going on underneat
 
 ### Coming next
 
-Mood and anxiety check-ins with trends over time, then on-device AI (via WebLLM) that summarizes your weeks and helps you spot patterns — still without anything leaving your device.
+On-device AI (via WebLLM) that suggests a mood from what you wrote, summarizes your weeks, and answers questions about your journal — still without anything leaving your device.
 
 ## Install
 
@@ -29,7 +31,7 @@ There is no backend. Journal entries are stored only in this browser's IndexedDB
 
 ## Not a substitute for care
 
-Undercurrent is a tool for reflection, not a diagnosis or treatment. If you're struggling, please reach out to someone — [find a helpline](https://findahelpline.com) in your country, or in the US call or text **988**.
+Undercurrent is a tool for reflection, not a diagnosis or treatment. Patterns it shows are correlations in what you've logged, not causes. If you log a very low mood, very high anxiety, or several hard days in a row, it gently points you to support. If you're struggling, please reach out to someone — [find a helpline](https://findahelpline.com) in your country, or in the US call or text **988**.
 
 ## Keys
 
