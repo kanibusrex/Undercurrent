@@ -392,12 +392,12 @@ await test("upgrading an existing database moves anxiety to 0–4", async () => 
       all.onsuccess = () => resolve({ version: req.result.version, rows: all.result.map((e) => e.anxiety ?? null) });
     };
   }));
-  assert(stored.version === 2, "db version " + stored.version);
+  assert(stored.version === 3, "db version " + stored.version);
   assert(JSON.stringify(stored.rows.sort()) === JSON.stringify([1, null].sort()), "stored: " + JSON.stringify(stored.rows));
   await ctx.close();
 });
 
-await test("new backups are version 2 and import without shifting", async () => {
+await test("new backups are version 3 and import without shifting", async () => {
   const ctx = await browser.newContext({ acceptDownloads: true });
   const pg = await ctx.newPage();
   await pg.goto(url);
@@ -406,7 +406,7 @@ await test("new backups are version 2 and import without shifting", async () => 
   await pg.click("#open-settings");
   const [download] = await Promise.all([pg.waitForEvent("download"), pg.click("#export")]);
   const backup = JSON.parse(await readFile(await download.path(), "utf8"));
-  assert(backup.version === 2 && backup.entries[0].anxiety === 0, JSON.stringify(backup.entries[0]));
+  assert(backup.version === 3 && backup.entries[0].anxiety === 0, JSON.stringify(backup));
   await pg.click("#close-settings");
   await pg.click(scaleBtn("anxiety", 0)); // clear, then restore from the backup
   await pg.waitForFunction(() => document.querySelector("#status").textContent === "Not written yet");
@@ -439,6 +439,129 @@ await phone2.screenshot({ path: join(shots, "trends-phone.png"), fullPage: true 
 await test("no page errors (step 2)", async () => {
   assert(!errors.length, errors.join("; "));
 });
+
+/* ---------- step 3a: questionnaires ---------- */
+console.log("Questionnaires");
+const ctx3 = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+const p3 = await ctx3.newPage();
+p3.on("pageerror", (e) => errors.push(e.message));
+await p3.goto(url);
+// answer every question in the open questionnaire with `pick(i)`
+async function answerAll(pick) {
+  const n = await p3.$$eval("#sc-inner .sc-q > li", (els) => els.length);
+  for (let i = 0; i < n; i++) await p3.click(`#sc-inner .sc-q > li[data-i="${i}"] .sc-opts button[data-v="${pick(i)}"]`);
+  return n;
+}
+
+await test("the two-week reminder shows, and 'Not now' snoozes it", async () => {
+  assert(await p3.isVisible("#screen-banner"), "banner shown when never taken");
+  await p3.click("#banner-later");
+  assert(await p3.isHidden("#screen-banner"), "snoozed");
+  await p3.reload();
+  assert(await p3.isHidden("#screen-banner"), "still snoozed after reload");
+  await p3.evaluate(() => localStorage.clear());
+  await p3.reload();
+  assert(await p3.isVisible("#screen-banner"), "back after the snooze ends");
+});
+
+await test("PHQ-9 uses the standard questions, needs every answer, and scores correctly", async () => {
+  await p3.click("#banner-start");
+  assert((await p3.textContent("#sc-inner .sc-step")).includes("PHQ-9"), "PHQ-9 first");
+  const n = await p3.$$eval("#sc-inner .sc-q > li", (els) => els.length);
+  assert(n === 9, `${n} questions`);
+  assert((await p3.textContent('#sc-inner li[data-i="1"] .q-text')) === "Feeling down, depressed, or hopeless", "wording");
+  assert(await p3.isDisabled("#sc-submit"), "can't submit yet");
+  await answerAll((i) => (i < 4 ? 2 : i === 8 ? 0 : 1)); // 2*4 + 1*4 + 0 = 12
+  assert(await p3.isHidden("#sc-crisis"), "no crisis message for 'not at all'");
+  await p3.click("#sc-submit");
+  const result = await p3.textContent("#sc-inner .result");
+  assert(result.includes("12") && result.includes("Moderate depression symptoms"), result);
+  assert(result.includes("10 or more") && result.includes("not a diagnosis"), "guidance + caveat");
+});
+
+await test("then GAD-7, with its own score", async () => {
+  await p3.click("#sc-next");
+  assert((await p3.textContent("#sc-inner .sc-step")).includes("GAD-7"), "GAD-7 next");
+  const n = await answerAll(() => 1); // 7
+  assert(n === 7, `${n} questions`);
+  await p3.click("#sc-submit");
+  const result = await p3.textContent("#sc-inner .result");
+  assert(result.includes("7") && result.includes("Mild anxiety symptoms"), result);
+  await p3.click("#sc-done");
+  assert(await p3.isHidden("#screen-banner"), "reminder gone once taken");
+});
+
+await test("any answer to the self-harm question shows crisis support immediately", async () => {
+  await p3.click("#open-trends");
+  await p3.click("#q-start");
+  await p3.click('#sc-inner li[data-i="8"] .sc-opts button[data-v="1"]');
+  assert(await p3.isVisible("#sc-crisis"), "shown as soon as it's answered");
+  assert((await p3.textContent("#sc-crisis")).includes("988"), "has 988");
+  await p3.click('#sc-inner li[data-i="8"] .sc-opts button[data-v="0"]');
+  assert(await p3.isHidden("#sc-crisis"), "hidden again for 'not at all'");
+  await p3.click('#sc-inner li[data-i="8"] .sc-opts button[data-v="1"]');
+  await answerAll((i) => (i === 8 ? 1 : 0)); // 1
+  await p3.click("#sc-submit");
+  await p3.waitForSelector("#sc-inner .result"); // saving happens first
+  assert(await p3.isVisible("#sc-inner .result .crisis"), "repeated on the result");
+  const result = await p3.textContent("#sc-inner .result");
+  assert(result.includes("Down 11 from last time"), "change since last: " + result);
+  await p3.click("#sc-done");
+});
+
+await test("Trends shows the latest results, a chart, and the history", async () => {
+  await p3.waitForFunction(() => document.querySelector(".q-section .tile")?.textContent.includes("Minimal"));
+  const tiles = await p3.$$eval(".q-section .tile", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ")));
+  assert(tiles[0].includes("PHQ-9") && tiles[0].includes("1") && tiles[0].includes("Minimal"), tiles[0]);
+  assert(tiles[1].includes("GAD-7") && tiles[1].includes("7") && tiles[1].includes("Mild"), tiles[1]);
+  assert(await p3.$("#score-phq9 svg"), "PHQ-9 chart (2 results)");
+  assert(!(await p3.$("#score-gad7")), "no GAD-7 chart with one result");
+  await p3.click(".history summary");
+  assert((await p3.$$(".history tbody tr")).length === 3, "3 results listed");
+  assert((await p3.textContent(".q-section")).includes("No permission required"), "attribution shown");
+});
+
+await test("results go into backups, and tampered scores are recomputed", async () => {
+  await p3.click("#open-settings");
+  const [download] = await Promise.all([p3.waitForEvent("download"), p3.click("#export")]);
+  const backup = JSON.parse(await readFile(await download.path(), "utf8"));
+  await p3.click("#close-settings");
+  assert(backup.screenings.length === 3, "3 in backup");
+  const fresh = await (await browser.newContext()).newPage();
+  await fresh.goto(url);
+  backup.screenings[0].score = 99; // the app must not trust stored scores
+  backup.screenings.push({ type: "gad7", answers: [9, 9], takenAt: 5 }); // invalid: dropped
+  const file = join(shots, "with-screenings.json");
+  await writeFile(file, JSON.stringify(backup));
+  await fresh.setInputFiles("#import-file", file);
+  await fresh.waitForFunction(() => document.querySelector("#toast").textContent.includes("3 questionnaire results"));
+  await fresh.click("#open-trends");
+  await fresh.click(".history summary");
+  const scores = await fresh.$$eval(".history tbody tr td:nth-child(3)", (els) => els.map((e) => e.textContent));
+  assert(scores.sort().join("|") === ["1 · Minimal", "12 · Moderate", "7 · Mild"].sort().join("|"), scores.join("|"));
+  await fresh.context().close();
+});
+
+await test("deleting a result removes it", async () => {
+  p3.once("dialog", (d) => d.accept());
+  await p3.click(".history tbody tr:first-child button");
+  await p3.waitForFunction(() => document.querySelectorAll(".history tbody tr").length === 2);
+});
+await p3.click("#q-start");
+await p3.waitForTimeout(300);
+await p3.screenshot({ path: join(shots, "phq9.png") });
+await p3.keyboard.press("Escape");
+await p3.screenshot({ path: join(shots, "questionnaires.png"), fullPage: true });
+
+const phone3 = await (await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })).newPage();
+await phone3.goto(url);
+await test("the questionnaire fits on a phone", async () => {
+  await phone3.click("#banner-start");
+  const bad = await phone3.evaluate(() => [...document.querySelectorAll("#screening *")]
+    .filter((el) => el.getClientRects().length && el.getBoundingClientRect().right > window.innerWidth + 0.5).map((el) => el.className || el.tagName));
+  assert(!bad.length, "off-screen: " + bad.join(", "));
+});
+await phone3.screenshot({ path: join(shots, "phq9-phone.png") });
 
 await browser.close();
 server.close();

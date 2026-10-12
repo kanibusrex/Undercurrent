@@ -280,6 +280,55 @@
   details.data-table td { color: var(--text); }
   .entry-btn .when .mood-word { color: var(--text-dim); }
 
+
+  /* questionnaires */
+  dialog.wide { width: min(680px, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); padding: 0; }
+  dialog.wide .sc-inner { padding: 1.5rem; overflow-y: auto; max-height: calc(100vh - 2rem); }
+  .sc-step { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 0.3rem; }
+  .sc-lead { font-family: var(--serif); font-style: italic; font-size: 1.05rem; color: var(--text-dim); margin: 0.6rem 0 1rem; }
+  .sc-q { list-style: none; display: flex; flex-direction: column; gap: 1rem; counter-reset: q; }
+  .sc-q > li { counter-increment: q; }
+  .sc-q .q-text { font-size: 0.95rem; line-height: 1.45; margin-bottom: 0.45rem; display: flex; gap: 0.5rem; }
+  .sc-q .q-text::before { content: counter(q) "."; color: var(--text-faint); font-variant-numeric: tabular-nums; min-width: 1.2rem; }
+  .sc-opts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem; padding-left: 1.7rem; }
+  .sc-opts button {
+    border-radius: 10px; border: 1px solid var(--glass-border); background: var(--glass); color: var(--text-dim);
+    font-size: 0.78rem; line-height: 1.25; padding: 0.45rem 0.4rem; cursor: pointer; text-align: center;
+  }
+  .sc-opts button:hover { background: var(--glass-strong); color: var(--text); }
+  .sc-opts button[aria-checked="true"] { background: rgba(240, 249, 255, 0.9); color: #0a1f2c; border-color: transparent; }
+  .crisis { margin-top: 0.7rem; margin-left: 1.7rem; font-size: 0.88rem; line-height: 1.55; background: rgba(252, 211, 77, 0.12); border: 1px solid rgba(252, 211, 77, 0.4); border-radius: 12px; padding: 0.75rem 0.9rem; }
+  .crisis[hidden] { display: none; }
+  .crisis b { color: var(--text); }
+  .crisis a { color: var(--text); font-weight: 500; }
+  .result .crisis { margin-left: 0; margin-bottom: 1rem; }
+  .sc-extra { margin-top: 1.2rem; padding-top: 1rem; border-top: 1px solid var(--glass-border); }
+  .sc-extra .q-text::before { content: none; }
+  .sc-extra .sc-opts { padding-left: 0; }
+  .sc-credit { font-size: 0.72rem; color: var(--text-faint); margin-top: 1rem; line-height: 1.45; }
+  .result .score { font-size: 3rem; font-weight: 600; letter-spacing: -0.03em; line-height: 1; margin-top: 0.4rem; }
+  .result .score small { font-size: 1rem; font-weight: 400; color: var(--text-dim); letter-spacing: 0; margin-left: 0.3rem; }
+  .result .band { font-size: 1.05rem; font-weight: 500; margin-top: 0.35rem; }
+  .result p { margin-top: 0.7rem; }
+  .result .change { font-size: 0.85rem; color: var(--text-dim); margin-top: 0.3rem; }
+  .banner { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; font-size: 0.86rem; color: var(--text-dim); background: rgba(125, 211, 252, 0.08); border: 1px solid rgba(125, 211, 252, 0.25); border-radius: 14px; padding: 0.7rem 0.9rem; }
+  .banner[hidden] { display: none; }
+  .banner b { color: var(--text); font-weight: 500; }
+  .banner .grow { flex: 1; min-width: 200px; }
+  .btn.small { padding: 0.4rem 0.85rem; font-size: 0.8rem; }
+  .q-section { display: flex; flex-direction: column; gap: 0.8rem; }
+  .q-section .head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .q-section h3 { font-size: 0.85rem; font-weight: 600; }
+  .tiles.two { grid-template-columns: repeat(2, 1fr); }
+  .score-chart .band-label { fill: var(--text-faint); font-size: 10px; font-family: var(--sans); }
+  .history td button { background: none; border: none; color: var(--text-faint); cursor: pointer; font-size: 0.78rem; }
+  .history td button:hover { color: var(--danger); }
+  @media (max-width: 560px) {
+    .sc-opts { grid-template-columns: 1fr 1fr; padding-left: 0; }
+    .crisis { margin-left: 0; }
+    .tiles.two { grid-template-columns: 1fr; }
+  }
+
   @media (max-width: 780px) {
     .layout { grid-template-columns: 1fr; }
     #toggle-list { display: inline-flex; }
@@ -335,6 +384,11 @@
     </aside>
 
     <main class="editor card rise d3">
+      <div class="banner" id="screen-banner" hidden>
+        <span class="grow"><b>Two-week check-in.</b> 16 short questions about how the last two weeks have been — about 3 minutes.</span>
+        <button class="btn small primary" id="banner-start">Start</button>
+        <button class="btn small" id="banner-later">Not now</button>
+      </div>
       <div class="day-nav">
         <button class="icon-btn" id="prev-day" aria-label="Previous day" title="Previous day (Alt+←)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
@@ -429,6 +483,10 @@
   <div class="buttons"><button class="btn primary" id="close-settings">Done</button></div>
 </dialog>
 
+<dialog id="screening" class="wide" aria-labelledby="sc-title">
+  <div class="sc-inner" id="sc-inner"></div>
+</dialog>
+
 <dialog id="confirm-delete">
   <h3>Delete this entry?</h3>
   <p id="confirm-delete-text"></p>
@@ -471,13 +529,22 @@ function relative(key) {
 /* ---------- storage (IndexedDB) ---------- */
 const DB_NAME = "undercurrent";
 const STORE = "entries";
+const SCREENINGS = "screenings"; // PHQ-9 / GAD-7 results
+const RECAPS = "recaps";         // AI weekly recaps, keyed by week start
+const VECTORS = "vectors";       // AI search vectors, keyed by entry date
 let dbPromise;
 function db() {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 2);
+    const req = indexedDB.open(DB_NAME, 3);
     req.onupgradeneeded = (ev) => {
-      if (ev.oldVersion < 1) req.result.createObjectStore(STORE, { keyPath: "date" });
+      const d = req.result;
+      if (ev.oldVersion < 1) d.createObjectStore(STORE, { keyPath: "date" });
       if (ev.oldVersion === 1) migrateAnxiety(req.transaction.objectStore(STORE));
+      if (ev.oldVersion < 3) {
+        d.createObjectStore(SCREENINGS, { keyPath: "id" });
+        d.createObjectStore(RECAPS, { keyPath: "week" });
+        d.createObjectStore(VECTORS, { keyPath: "date" });
+      }
     };
     // An older tab still holding the database open would stall the upgrade.
     req.onblocked = () => setStatus("Close other Undercurrent tabs to finish updating.", "error");
@@ -505,11 +572,11 @@ function migrateAnxiety(objectStore) {
   };
 }
 
-async function tx(mode, fn) {
+async function tx(mode, fn, name = STORE) {
   const database = await db();
   return new Promise((resolve, reject) => {
-    const t = database.transaction(STORE, mode);
-    const result = fn(t.objectStore(STORE));
+    const t = database.transaction(name, mode);
+    const result = fn(t.objectStore(name));
     t.oncomplete = () => resolve(result?.result);
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error);
@@ -521,6 +588,17 @@ const store = {
   put: (entry) => tx("readwrite", (s) => s.put(entry)),
   remove: (date) => tx("readwrite", (s) => s.delete(date)),
 };
+// The same four operations for the other stores.
+const storeOf = (name) => ({
+  all: () => tx("readonly", (s) => s.getAll(), name),
+  get: (key) => tx("readonly", (s) => s.get(key), name),
+  put: (value) => tx("readwrite", (s) => s.put(value), name),
+  remove: (key) => tx("readwrite", (s) => s.delete(key), name),
+  clear: () => tx("readwrite", (s) => s.clear(), name),
+});
+const screeningStore = storeOf(SCREENINGS);
+const recapStore = storeOf(RECAPS);
+const vectorStore = storeOf(VECTORS);
 
 /* ---------- state ---------- */
 const entries = new Map(); // date -> { date, text, mood, anxiety, factors, createdAt, updatedAt }
@@ -931,7 +1009,9 @@ function renderTrends() {
   if (days.length < 2) {
     body.innerHTML = `<div class="empty-trends"><b>Not enough check-ins yet</b>
       Rate your mood and anxiety on a few days and your trends will show up here.<br>
-      ${days.length ? "One down — keep going." : `There are no check-ins in the last ${period}.`}</div>`;
+      ${days.length ? "One down — keep going." : `There are no check-ins in the last ${period}.`}</div>
+      ${questionnairesHtml()}`;
+    Object.keys(QUESTIONNAIRES).forEach(drawScoreChart);
     return;
   }
 
@@ -966,9 +1046,11 @@ function renderTrends() {
       <div class="chart" id="chart-anxiety" tabindex="0" role="img" aria-label="Anxiety over the last ${period}. Use left and right arrow keys to read each day."></div>
     </div>
     ${patternsHtml(keys)}
-    ${tableHtml(days)}`;
+    ${tableHtml(days)}
+    ${questionnairesHtml()}`;
 
   drawCharts(keys);
+  Object.keys(QUESTIONNAIRES).forEach(drawScoreChart);
 }
 
 // A quiet nudge when recent check-ins have been hard. Describes, never diagnoses.
@@ -1139,6 +1221,324 @@ window.addEventListener("resize", () => {
   resizeTimer = setTimeout(() => { if (!$("trends").hidden) renderTrends(); }, 150);
 });
 
+/* ---------- questionnaires (PHQ-9, GAD-7) ---------- */
+// Standard wording and scoring. Both ask about the last two weeks and are screening
+// tools, not diagnoses. Scores are plain sums — no AI involved.
+const FREQ = ["Not at all", "Several days", "More than half the days", "Nearly every day"];
+const DIFFICULTY = ["Not difficult at all", "Somewhat difficult", "Very difficult", "Extremely difficult"];
+const QUESTIONNAIRES = {
+  phq9: {
+    name: "PHQ-9",
+    about: "depression",
+    lead: "Over the last 2 weeks, how often have you been bothered by any of the following problems?",
+    items: [
+      "Little interest or pleasure in doing things",
+      "Feeling down, depressed, or hopeless",
+      "Trouble falling or staying asleep, or sleeping too much",
+      "Feeling tired or having little energy",
+      "Poor appetite or overeating",
+      "Feeling bad about yourself — or that you are a failure or have let yourself or your family down",
+      "Trouble concentrating on things, such as reading the newspaper or watching television",
+      "Moving or speaking so slowly that other people could have noticed? Or the opposite — being so fidgety or restless that you have been moving around a lot more than usual",
+      "Thoughts that you would be better off dead or of hurting yourself in some way",
+    ],
+    crisisItem: 8, // any answer above "not at all" shows crisis support right away
+    bands: [[0, "Minimal"], [5, "Mild"], [10, "Moderate"], [15, "Moderately severe"], [20, "Severe"]],
+    max: 27,
+  },
+  gad7: {
+    name: "GAD-7",
+    about: "anxiety",
+    lead: "Over the last 2 weeks, how often have you been bothered by the following problems?",
+    items: [
+      "Feeling nervous, anxious, or on edge",
+      "Not being able to stop or control worrying",
+      "Worrying too much about different things",
+      "Trouble relaxing",
+      "Being so restless that it is hard to sit still",
+      "Becoming easily annoyed or irritable",
+      "Feeling afraid as if something awful might happen",
+    ],
+    bands: [[0, "Minimal"], [5, "Mild"], [10, "Moderate"], [15, "Severe"]],
+    max: 21,
+  },
+};
+const DIFFICULTY_Q = "If you checked off any problems, how difficult have these problems made it for you to do your work, take care of things at home, or get along with other people?";
+const CREDIT = "PHQ-9 and GAD-7 were developed by Drs. Robert L. Spitzer, Janet B.W. Williams, Kurt Kroenke and colleagues, with an educational grant from Pfizer Inc. No permission required to reproduce, translate, display or distribute.";
+const CRISIS_HTML = `<b>Thank you for answering honestly. You deserve support right now.</b><br>
+  In the US, call or text <a href="tel:988">988</a> (Suicide &amp; Crisis Lifeline), any time.
+  Elsewhere, <a href="https://findahelpline.com" target="_blank" rel="noopener">find a helpline in your country</a>.
+  If you might act on these thoughts or are in danger, call your local emergency number now.`;
+const SCREEN_EVERY_DAYS = 14;
+
+const screenings = new Map(); // id -> { id, type, date, takenAt, answers, difficulty, score }
+const bandOf = (type, score) => QUESTIONNAIRES[type].bands.filter(([min]) => score >= min).pop()[1];
+const scoreOf = (answers) => answers.reduce((a, b) => a + b, 0);
+const byType = (type) => [...screenings.values()].filter((r) => r.type === type).sort((a, b) => a.takenAt - b.takenAt);
+const latest = (type) => byType(type).pop() ?? null;
+
+function normalizeScreening(r) {
+  const def = QUESTIONNAIRES[r?.type];
+  if (!def || !Array.isArray(r.answers) || r.answers.length !== def.items.length) return null;
+  if (!r.answers.every((a) => Number.isInteger(a) && a >= 0 && a <= 3)) return null;
+  const takenAt = Number(r.takenAt) || Date.now();
+  return {
+    id: typeof r.id === "string" ? r.id : `${r.type}-${takenAt}`,
+    type: r.type,
+    date: typeof r.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.date) ? r.date : dayKey(new Date(takenAt)),
+    takenAt,
+    answers: [...r.answers],
+    difficulty: Number.isInteger(r.difficulty) && r.difficulty >= 0 && r.difficulty <= 3 ? r.difficulty : null,
+    score: scoreOf(r.answers), // always recomputed, never trusted from a file
+  };
+}
+
+async function loadScreenings() {
+  screenings.clear();
+  for (const r of await screeningStore.all()) { const n = normalizeScreening(r); if (n) screenings.set(n.id, n); }
+}
+
+/* the dialog walks through a queue of questionnaires, showing each result as it goes */
+let scQueue = [], scAnswers = [], scDifficulty = null;
+
+function startScreening(types = ["phq9", "gad7"]) {
+  scQueue = [...types];
+  showQuestionnaire();
+  $("screening").showModal();
+}
+
+function optionButtons(name, labels, selected) {
+  return `<div class="sc-opts" role="radiogroup" aria-label="${escapeHtml(name)}">${labels.map((l, v) =>
+    `<button type="button" role="radio" data-v="${v}" aria-checked="${selected === v}">${l}</button>`).join("")}</div>`;
+}
+
+function showQuestionnaire() {
+  const type = scQueue[0];
+  const def = QUESTIONNAIRES[type];
+  scAnswers = def.items.map(() => null);
+  scDifficulty = null;
+  const total = scQueue.length;
+  $("sc-inner").innerHTML = `
+    <div class="sc-step">${escapeHtml(def.name)} · about ${def.about}${total > 1 ? ` · 1 of ${total}` : ""}</div>
+    <h3 id="sc-title">How have the last two weeks been?</h3>
+    <p class="sc-lead">${escapeHtml(def.lead)}</p>
+    <ol class="sc-q">${def.items.map((q, i) => `
+      <li data-i="${i}">
+        <div class="q-text">${escapeHtml(q)}</div>
+        ${optionButtons(q, FREQ, null)}
+        ${i === def.crisisItem ? `<div class="crisis" id="sc-crisis" role="alert" hidden>${CRISIS_HTML}</div>` : ""}
+      </li>`).join("")}
+    </ol>
+    <div class="sc-extra" data-extra>
+      <div class="q-text">${escapeHtml(DIFFICULTY_Q)} <span style="color:var(--text-faint)">(optional)</span></div>
+      ${optionButtons(DIFFICULTY_Q, DIFFICULTY, null)}
+    </div>
+    <p class="sc-credit">This is a screening questionnaire, not a diagnosis. Your answers stay on this device. ${escapeHtml(CREDIT)}</p>
+    <div class="buttons">
+      <button type="button" class="btn" id="sc-cancel">Not now</button>
+      <button type="button" class="btn primary" id="sc-submit" disabled>See my score</button>
+    </div>`;
+  $("sc-inner").scrollTop = 0;
+}
+
+$("sc-inner").addEventListener("click", async (e) => {
+  const opt = e.target.closest(".sc-opts button");
+  if (opt) {
+    const v = Number(opt.dataset.v);
+    const li = opt.closest("li[data-i]");
+    const group = opt.parentElement;
+    group.querySelectorAll("button").forEach((b) => b.setAttribute("aria-checked", String(b === opt)));
+    if (li) {
+      const i = Number(li.dataset.i);
+      scAnswers[i] = v;
+      const def = QUESTIONNAIRES[scQueue[0]];
+      if (i === def.crisisItem) $("sc-crisis").hidden = v === 0;
+    } else {
+      scDifficulty = v;
+    }
+    $("sc-submit").disabled = scAnswers.some((a) => a == null);
+    return;
+  }
+  if (e.target.id === "sc-cancel" || e.target.id === "sc-done") { $("screening").close(); return; }
+  if (e.target.id === "sc-next") { showQuestionnaire(); return; }
+  if (e.target.id === "sc-submit") await submitQuestionnaire();
+});
+
+async function submitQuestionnaire() {
+  const type = scQueue.shift();
+  const def = QUESTIONNAIRES[type];
+  const before = latest(type);
+  const takenAt = Date.now();
+  const record = normalizeScreening({ id: `${type}-${takenAt}`, type, date: todayKey(), takenAt, answers: scAnswers, difficulty: scDifficulty });
+  try {
+    await screeningStore.put(record);
+  } catch (err) {
+    console.error(err);
+    toast("Couldn't save your answers — is storage blocked?");
+    return;
+  }
+  screenings.set(record.id, record);
+  channel?.postMessage({ type: "screenings" });
+  const crisis = def.crisisItem != null && record.answers[def.crisisItem] > 0;
+  const next = scQueue[0] ? QUESTIONNAIRES[scQueue[0]] : null;
+  $("sc-inner").innerHTML = `
+    <div class="result">
+      <div class="sc-step">${escapeHtml(def.name)} · your result</div>
+      ${crisis ? `<div class="crisis" role="alert">${CRISIS_HTML}</div>` : ""}
+      <h3 id="sc-title">${escapeHtml(bandOf(type, record.score))} ${def.about === "depression" ? "depression" : "anxiety"} symptoms</h3>
+      <div class="score">${record.score}<small>out of ${def.max}</small></div>
+      ${before ? `<div class="change">${changeText(record.score, before)}</div>` : ""}
+      <p>${guidance(record.score)}</p>
+      <p class="sc-credit">This is a screening questionnaire, not a diagnosis. Only a doctor or therapist can tell you what's going on — but it's a useful way to notice changes over time.</p>
+      <div class="buttons">
+        ${next ? `<button type="button" class="btn" id="sc-done">Stop here</button><button type="button" class="btn primary" id="sc-next">Next: ${escapeHtml(next.name)} (${next.about})</button>`
+               : `<button type="button" class="btn primary" id="sc-done">Done</button>`}
+      </div>
+    </div>`;
+  $("sc-inner").scrollTop = 0;
+  updateBanner();
+  if (!$("trends").hidden) renderTrends();
+}
+
+function changeText(score, before) {
+  const d = score - before.score;
+  const when = fromKey(before.date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  if (d === 0) return `Same as last time (${when}).`;
+  return `${d < 0 ? "Down" : "Up"} ${Math.abs(d)} from last time (${when}).`;
+}
+
+function guidance(score) {
+  return score >= 10
+    ? "A score of 10 or more is where doctors usually suggest taking a closer look. It's worth sharing this with a doctor or therapist — you can show them this result."
+    : "Keep an eye on how this changes over time. If things get harder, or this score climbs, it's worth talking to a doctor or therapist.";
+}
+
+/* reminder: offer the questionnaires every two weeks, gently */
+const SNOOZE_KEY = "undercurrent.screenSnoozedUntil";
+function screeningDue() {
+  const last = Math.min(...Object.keys(QUESTIONNAIRES).map((t) => latest(t)?.takenAt ?? 0));
+  return Date.now() - last >= SCREEN_EVERY_DAYS * 86400000;
+}
+function updateBanner() {
+  let snoozed = 0;
+  try { snoozed = Number(localStorage.getItem(SNOOZE_KEY)) || 0; } catch {}
+  $("screen-banner").hidden = !(screeningDue() && Date.now() >= snoozed);
+}
+$("banner-start").addEventListener("click", () => startScreening());
+$("banner-later").addEventListener("click", () => {
+  try { localStorage.setItem(SNOOZE_KEY, String(Date.now() + 3 * 86400000)); } catch {}
+  updateBanner();
+});
+
+/* trends section */
+function questionnairesHtml() {
+  const types = Object.keys(QUESTIONNAIRES);
+  const any = types.some((t) => latest(t));
+  const head = `<div class="head"><h3>Questionnaires</h3><button class="btn small" id="q-start">Take them now</button></div>`;
+  if (!any) {
+    return `<section class="q-section">${head}
+      <p class="sub">Every two weeks, the PHQ-9 (depression) and GAD-7 (anxiety) questionnaires — the same short screenings doctors use — give you a steady way to see how things are changing.</p></section>`;
+  }
+  const tile = (t) => {
+    const def = QUESTIONNAIRES[t], last = latest(t), all = byType(t);
+    if (!last) return `<div class="tile"><div class="t-label"><span class="key ${t === "phq9" ? "mood" : "anxiety"}"></span>${def.name} · ${def.about}</div><div class="t-value">—</div><div class="t-delta">Not taken yet</div></div>`;
+    const prev = all.length > 1 ? all[all.length - 2] : null;
+    return `<div class="tile">
+      <div class="t-label"><span class="key ${t === "phq9" ? "mood" : "anxiety"}"></span>${def.name} · ${def.about}</div>
+      <div class="t-value">${last.score}<small>${escapeHtml(bandOf(t, last.score))} · of ${def.max}</small></div>
+      <div class="t-delta">${escapeHtml(longDate(last.date))}${prev ? ` · ${escapeHtml(changeText(last.score, prev))}` : ""}</div>
+    </div>`;
+  };
+  const charts = types.filter((t) => byType(t).length >= 2).map((t) => `
+    <div class="chart-block">
+      <h3><span class="key ${t === "phq9" ? "mood" : "anxiety"}"></span>${QUESTIONNAIRES[t].name} over time</h3>
+      <div class="sub">0 to ${QUESTIONNAIRES[t].max} · lower is better</div>
+      <div class="chart score-chart" id="score-${t}" tabindex="0" role="img" aria-label="${QUESTIONNAIRES[t].name} scores over time. Use left and right arrow keys to read each result."></div>
+    </div>`).join("");
+  const rows = [...screenings.values()].sort((a, b) => b.takenAt - a.takenAt).map((r) => `<tr>
+    <td>${escapeHtml(fromKey(r.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }))}</td>
+    <td>${QUESTIONNAIRES[r.type].name}</td><td>${r.score} · ${escapeHtml(bandOf(r.type, r.score))}</td>
+    <td><button data-delete-screening="${escapeHtml(r.id)}" aria-label="Delete this result">Delete</button></td></tr>`).join("");
+  return `<section class="q-section">${head}
+    <div class="tiles two">${types.map(tile).join("")}</div>
+    ${screeningDue() ? `<p class="sub">It's been two weeks or more — a good time to take them again.</p>` : ""}
+    ${charts}
+    <details class="data-table history"><summary>All results</summary><div class="scroll"><table>
+      <thead><tr><th>Date</th><th>Questionnaire</th><th>Score</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></details>
+    <p class="sc-credit">Screening questionnaires, not diagnoses. ${escapeHtml(CREDIT)}</p>
+  </section>`;
+}
+
+// A small line chart of scores with the severity bands drawn as labelled gridlines.
+function drawScoreChart(type) {
+  const host = $(`score-${type}`);
+  if (!host) return;
+  const def = QUESTIONNAIRES[type], data = byType(type);
+  const color = type === "phq9" ? "var(--mood)" : "var(--anxiety)";
+  const W = Math.max(280, host.clientWidth || 600), H = 150, m = { l: 26, r: 96, t: 10, b: 24 };
+  const t0 = data[0].takenAt, t1 = data[data.length - 1].takenAt;
+  const x = (t) => m.l + (t1 === t0 ? 0.5 : (t - t0) / (t1 - t0)) * (W - m.l - m.r);
+  const y = (v) => m.t + (1 - v / def.max) * (H - m.t - m.b);
+  host.innerHTML = "";
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, "aria-hidden": "true" }, host);
+  def.bands.forEach(([min, label], i) => {
+    svgEl("line", { class: "grid", x1: m.l, x2: W - m.r, y1: y(min), y2: y(min) }, svg);
+    svgEl("text", { class: "axis-text", x: m.l - 8, y: y(min) + 4, "text-anchor": "end" }, svg).textContent = min;
+    const top = def.bands[i + 1]?.[0] ?? def.max;
+    svgEl("text", { class: "band-label", x: W - m.r + 8, y: (y(min) + y(top)) / 2 + 3 }, svg).textContent = label;
+  });
+  svgEl("text", { class: "axis-text", x: m.l, y: H - 6 }, svg).textContent = fromKey(data[0].date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  svgEl("text", { class: "axis-text", x: W - m.r, y: H - 6, "text-anchor": "end" }, svg).textContent = fromKey(data[data.length - 1].date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  svgEl("path", { class: "line", stroke: color, d: data.map((r, i) => `${i ? "L" : "M"}${x(r.takenAt).toFixed(1)},${y(r.score).toFixed(1)}`).join("") }, svg);
+  data.forEach((r, i) => svgEl("circle", { class: "dot", cx: x(r.takenAt), cy: y(r.score), r: 4, fill: color, "data-i": i }, svg));
+  const cross = svgEl("line", { class: "cross", y1: m.t, y2: H - m.b, visibility: "hidden" }, svg);
+  const tip = document.createElement("div");
+  tip.className = "tooltip";
+  tip.hidden = true;
+  host.append(tip);
+  let active = null;
+  const show = (i) => {
+    active = i;
+    svg.querySelectorAll(".dot.hot").forEach((d) => d.classList.remove("hot"));
+    if (i == null) { cross.setAttribute("visibility", "hidden"); tip.hidden = true; return; }
+    const r = data[i];
+    cross.setAttribute("x1", x(r.takenAt)); cross.setAttribute("x2", x(r.takenAt)); cross.setAttribute("visibility", "visible");
+    svg.querySelector(`.dot[data-i="${i}"]`).classList.add("hot");
+    tip.innerHTML = `<b>${escapeHtml(longDate(r.date))}</b><div class="row">${def.name} <span>${r.score} · ${escapeHtml(bandOf(type, r.score))}</span></div>`;
+    tip.hidden = false;
+    const px = x(r.takenAt) * (host.clientWidth / W);
+    tip.style.left = Math.min(Math.max(0, px - tip.offsetWidth / 2), host.clientWidth - tip.offsetWidth) + "px";
+    tip.style.top = -tip.offsetHeight - 8 + "px";
+  };
+  host.addEventListener("pointermove", (e) => {
+    const rect = host.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * W;
+    let best = 0;
+    data.forEach((r, i) => { if (Math.abs(x(r.takenAt) - px) < Math.abs(x(data[best].takenAt) - px)) best = i; });
+    show(best);
+  });
+  host.addEventListener("pointerleave", () => show(null));
+  host.addEventListener("blur", () => show(null));
+  host.addEventListener("focus", () => show(active ?? data.length - 1));
+  host.addEventListener("keydown", (e) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    if (step) { e.preventDefault(); show(Math.min(data.length - 1, Math.max(0, (active ?? data.length - 1) + step))); }
+    if (e.key === "Escape") show(null);
+  });
+}
+
+$("trends-body").addEventListener("click", async (e) => {
+  if (e.target.id === "q-start") { startScreening(); return; }
+  const id = e.target.dataset?.deleteScreening;
+  if (id && confirm("Delete this questionnaire result? This can't be undone.")) {
+    await screeningStore.remove(id);
+    screenings.delete(id);
+    channel?.postMessage({ type: "screenings" });
+    updateBanner();
+    renderTrends();
+  }
+});
+
 /* ---------- your data ---------- */
 async function openSettings() {
   if (dirty) await saveNow();
@@ -1147,6 +1547,7 @@ async function openSettings() {
   $("data-summary").textContent = count
     ? `${count} ${count === 1 ? "entry" : "entries"}, ${longDate(keys[0])} to ${longDate(keys[keys.length - 1])}`
     : "No entries yet.";
+  if (screenings.size) $("data-summary").textContent += ` · ${screenings.size} questionnaire result${screenings.size === 1 ? "" : "s"}`;
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   $("persist-status").innerHTML = persisted ? `<span class="ok">On</span>` : `<span class="warn">Off</span>`;
   $("persist-detail").textContent = persisted
@@ -1159,9 +1560,10 @@ async function exportData() {
   if (dirty) await saveNow();
   const data = {
     app: "undercurrent",
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     entries: [...entries.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    screenings: [...screenings.values()].sort((a, b) => a.takenAt - b.takenAt),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
@@ -1169,7 +1571,7 @@ async function exportData() {
   a.download = `undercurrent-backup-${todayKey()}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast(`Exported ${entries.size} entries.`);
+  toast(`Exported ${entries.size} entries${screenings.size ? ` and ${screenings.size} questionnaire results` : ""}.`);
 }
 
 async function importData(file) {
@@ -1188,9 +1590,18 @@ async function importData(file) {
     entries.set(e.date, incoming);
     existing ? updated++ : added++;
   }
+  let results = 0;
+  for (const r of Array.isArray(data.screenings) ? data.screenings : []) {
+    const n = normalizeScreening(r);
+    if (!n || screenings.has(n.id)) continue;
+    await screeningStore.put(n);
+    screenings.set(n.id, n);
+    results++;
+  }
+  updateBanner();
   channel?.postMessage({ type: "reload" });
   openDay(current);
-  toast(`Restored ${added} new, ${updated} updated${skipped ? `, ${skipped} unchanged` : ""}.`);
+  toast(`Restored ${added} new, ${updated} updated${skipped ? `, ${skipped} unchanged` : ""}${results ? `, ${results} questionnaire results` : ""}.`);
 }
 
 /* ---------- events ---------- */
@@ -1257,7 +1668,8 @@ window.addEventListener("resize", () => { if (mode === "write") autosize(); });
 
 // Another tab changed something: pick it up, unless we're mid-edit on that day.
 channel?.addEventListener("message", async ({ data }) => {
-  if (data.type === "reload") { await loadAll(); openDay(current); return; }
+  if (data.type === "reload") { await loadAll(); openDay(current); updateBanner(); return; }
+  if (data.type === "screenings") { await loadScreenings(); updateBanner(); if (!$("trends").hidden) renderTrends(); return; }
   const entry = await store.get(data.date);
   entry ? entries.set(data.date, normalize(entry)) : entries.delete(data.date);
   if (data.date === current && !dirty && $("trends").hidden) openDay(current);
@@ -1279,6 +1691,7 @@ setInterval(() => {
 async function loadAll() {
   entries.clear();
   for (const e of await store.all()) entries.set(e.date, normalize(e));
+  await loadScreenings();
 }
 
 buildCheckin();
@@ -1294,6 +1707,7 @@ document.querySelectorAll(".rise").forEach((el) =>
     console.error(err);
   }
   openDay(todayKey(), { focus: true });
+  updateBanner();
 })();
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
