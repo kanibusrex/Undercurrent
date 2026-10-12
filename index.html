@@ -368,6 +368,38 @@
   .week-pick { display: inline-flex; }
   .reflect .crisis { margin-left: 0; }
 
+
+  /* safety plan */
+  .faint { color: var(--text-faint); }
+  .plan-now { font-size: 0.9rem; line-height: 1.6; background: rgba(125, 211, 252, 0.08); border: 1px solid rgba(125, 211, 252, 0.28); border-radius: 14px; padding: 0.8rem 1rem; margin-bottom: 1rem; }
+  .plan-now a { color: var(--text); font-weight: 600; }
+  .country { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--text-faint); margin-top: 0.5rem; }
+  .country select { background: var(--field); color: var(--text); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.25rem 0.4rem; font: inherit; }
+  .plan-step { padding: 0.85rem 0; border-top: 1px solid var(--glass-border); }
+  .plan-step h4 { font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; gap: 0.55rem; }
+  .plan-step .num { width: 22px; height: 22px; border-radius: 50%; background: var(--glass-strong); display: inline-grid; place-items: center; font-size: 0.75rem; flex: none; }
+  .plan-step .hint { font-size: 0.8rem; color: var(--text-faint); margin: 0.2rem 0 0.5rem 1.9rem; }
+  .plan-step ul { margin-left: 1.9rem; padding-left: 1rem; font-family: var(--serif); font-size: 1.02rem; line-height: 1.55; }
+  .plan-step > p.faint { margin-left: 1.9rem; font-size: 0.85rem; font-style: italic; }
+  .plan-step ul.plan-contacts { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+  .plan-contacts li { display: flex; justify-content: space-between; gap: 1rem; }
+  .plan-contacts a { font-family: var(--sans); font-size: 0.9rem; color: var(--accent-2); }
+  .plan-step textarea, .contact-row input {
+    width: calc(100% - 1.9rem); margin-left: 1.9rem; background: var(--field); border: 1px solid var(--glass-border); border-radius: 10px;
+    color: var(--text); font: inherit; font-size: 0.92rem; padding: 0.5rem 0.7rem; resize: vertical;
+  }
+  .contacts { display: flex; flex-direction: column; gap: 0.35rem; }
+  .contact-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; margin-left: 1.9rem; }
+  .contact-row input { width: 100%; margin-left: 0; }
+  .add-contact { margin: 0.4rem 0 0 1.9rem; color: var(--accent-2); }
+  footer a[data-open-plan] { color: var(--text-dim); }
+  @media (max-width: 560px) {
+    .plan-step .hint, .plan-step > p.faint, .add-contact { margin-left: 0; }
+    .plan-step ul { margin-left: 0; }
+    .plan-step textarea { width: 100%; margin-left: 0; }
+    .contact-row { margin-left: 0; grid-template-columns: 1fr; }
+  }
+
   @media (max-width: 780px) {
     .layout { grid-template-columns: 1fr; }
     #toggle-list { display: inline-flex; }
@@ -468,8 +500,7 @@
           <button class="link-btn ai-link" id="ai-suggest">✦ Suggest a check-in from what I wrote</button>
         </div>
         <div class="suggestion" id="suggestion" hidden></div>
-        <p class="care-note" id="care-note" hidden>That sounds really hard. You don't have to carry it alone —
-          <a href="https://findahelpline.com" target="_blank" rel="noopener">find someone to talk to</a>, or in the US call or text <a href="tel:988">988</a>.</p>
+        <p class="care-note" id="care-note" hidden></p>
       </section>
 
       <div class="prompt" id="prompt">
@@ -516,7 +547,7 @@
 
   <footer>
     <span>Private: your entries stay on this device. Nothing is sent anywhere.</span>
-    <span>Having a hard time? <a href="https://findahelpline.com" target="_blank" rel="noopener">Find someone to talk to</a> · US: call or text <a href="tel:988">988</a></span>
+    <span id="footer-help"></span>
   </footer>
 </div>
 
@@ -548,6 +579,10 @@
 
 <dialog id="screening" class="wide" aria-labelledby="sc-title">
   <div class="sc-inner" id="sc-inner"></div>
+</dialog>
+
+<dialog id="plan" class="wide" aria-labelledby="plan-title">
+  <div class="sc-inner" id="plan-inner"></div>
 </dialog>
 
 <dialog id="confirm-delete">
@@ -598,7 +633,7 @@ const VECTORS = "vectors";       // AI search vectors, keyed by entry date
 let dbPromise;
 function db() {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 3);
+    const req = indexedDB.open(DB_NAME, 4);
     req.onupgradeneeded = (ev) => {
       const d = req.result;
       if (ev.oldVersion < 1) d.createObjectStore(STORE, { keyPath: "date" });
@@ -608,6 +643,7 @@ function db() {
         d.createObjectStore(RECAPS, { keyPath: "week" });
         d.createObjectStore(VECTORS, { keyPath: "date" });
       }
+      if (ev.oldVersion < 4) d.createObjectStore("meta", { keyPath: "key" }); // safety plan, lock settings
     };
     // An older tab still holding the database open would stall the upgrade.
     req.onblocked = () => setStatus("Close other Undercurrent tabs to finish updating.", "error");
@@ -1131,7 +1167,7 @@ function gentleCheck() {
   if (hard < 5) return "";
   return `<div class="gentle">You've logged <b>${hard} hard days</b> in the last two weeks. That's a lot to carry.
     Talking it through with someone you trust, or a professional, can really help —
-    <a href="https://findahelpline.com" target="_blank" rel="noopener">find someone to talk to</a>, or in the US call or text <a href="tel:988">988</a>.</div>`;
+    ${helplineHtml({ compact: true })}, or <a href="#" data-open-plan>open your safety plan</a>.</div>`;
 }
 
 // Compare days tagged with a factor against the other check-in days. Patterns, not causes.
@@ -1336,14 +1372,6 @@ const QUESTIONNAIRES = {
 };
 const DIFFICULTY_Q = "If you checked off any problems, how difficult have these problems made it for you to do your work, take care of things at home, or get along with other people?";
 const CREDIT = "PHQ-9 and GAD-7 were developed by Drs. Robert L. Spitzer, Janet B.W. Williams, Kurt Kroenke and colleagues, with an educational grant from Pfizer Inc. No permission required to reproduce, translate, display or distribute.";
-const CRISIS_HTML = `<b>Thank you for answering honestly. You deserve support right now.</b><br>
-  In the US, call or text <a href="tel:988">988</a> (Suicide &amp; Crisis Lifeline), any time.
-  Elsewhere, <a href="https://findahelpline.com" target="_blank" rel="noopener">find a helpline in your country</a>.
-  If you might act on these thoughts or are in danger, call your local emergency number now.`;
-const SUPPORT_HTML = `<b>Some of what's here sounds really painful. You deserve support right now.</b><br>
-  In the US, call or text <a href="tel:988">988</a> (Suicide &amp; Crisis Lifeline), any time.
-  Elsewhere, <a href="https://findahelpline.com" target="_blank" rel="noopener">find a helpline in your country</a>.
-  If you might act on thoughts of hurting yourself, call your local emergency number now.`;
 const SCREEN_EVERY_DAYS = 14;
 
 const screenings = new Map(); // id -> { id, type, date, takenAt, answers, difficulty, score }
@@ -1401,7 +1429,7 @@ function showQuestionnaire() {
       <li data-i="${i}">
         <div class="q-text">${escapeHtml(q)}</div>
         ${optionButtons(q, FREQ, null)}
-        ${i === def.crisisItem ? `<div class="crisis" id="sc-crisis" role="alert" hidden>${CRISIS_HTML}</div>` : ""}
+        ${i === def.crisisItem ? `<div class="crisis" id="sc-crisis" role="alert" hidden>${crisisHtml(CRISIS_LEAD)}</div>` : ""}
       </li>`).join("")}
     </ol>
     <div class="sc-extra" data-extra>
@@ -1459,7 +1487,7 @@ async function submitQuestionnaire() {
   $("sc-inner").innerHTML = `
     <div class="result">
       <div class="sc-step">${escapeHtml(def.name)} · your result</div>
-      ${crisis ? `<div class="crisis" role="alert">${CRISIS_HTML}</div>` : ""}
+      ${crisis ? `<div class="crisis" role="alert">${crisisHtml(CRISIS_LEAD)}</div>` : ""}
       <h3 id="sc-title">${escapeHtml(bandOf(type, record.score))} ${def.about === "depression" ? "depression" : "anxiety"} symptoms</h3>
       <div class="score">${record.score}<small>out of ${def.max}</small></div>
       ${before ? `<div class="change">${changeText(record.score, before)}</div>` : ""}
@@ -1761,7 +1789,7 @@ async function renderReflect() {
           <button data-week="${lastWeek}" aria-pressed="${recapWeek === lastWeek}">Last week</button>
         </span>
       </h3>
-      <div class="crisis" id="recap-crisis" hidden>${SUPPORT_HTML}</div>
+      <div class="crisis" id="recap-crisis" hidden>${crisisHtml(SUPPORT_LEAD)}</div>
       <div class="ai-text" id="recap-text"></div>
       <div class="ai-meta" id="recap-meta"></div>
       <div id="recap-progress"></div>
@@ -1774,7 +1802,7 @@ async function renderReflect() {
         <button class="btn primary" type="submit" id="ask-go">Ask</button>
       </form>
       <div class="examples">${EXAMPLES.map((q) => `<button type="button" data-q="${escapeHtml(q)}">${escapeHtml(q)}</button>`).join("")}</div>
-      <div class="crisis" id="ask-crisis" hidden>${SUPPORT_HTML}</div>
+      <div class="crisis" id="ask-crisis" hidden>${crisisHtml(SUPPORT_LEAD)}</div>
       <div id="ask-progress"></div>
       <div class="ai-text" id="ask-answer"></div>
       <div class="sources" id="ask-sources"></div>
@@ -1984,6 +2012,208 @@ $("open-reflect").addEventListener("click", async () => {
   if (matchMedia("(max-width: 780px)").matches) toggleList(false);
 });
 
+/* ---------- helplines ---------- */
+// Crisis lines checked against official and current sources on 2026-10-12 (988.ca, samaritans.org,
+// lifeline.org.au, 1737.org.nz, sante.fr, sanidad.gob.es, 113.nl, telefonseelsorge.de,
+// telemanas.mohfw.gov.in, cvv.org.br, sadag.org, lineadelavida.gob.mx). Everywhere else gets
+// findahelpline.com's directory and the local emergency number.
+const HELPLINES = {
+  US: { name: "United States", lines: [["988", "988", "Suicide & Crisis Lifeline — call or text, any time"]], emergency: "911" },
+  CA: { name: "Canada", lines: [["988", "9-8-8", "Suicide Crisis Helpline — call or text, any time"]], emergency: "911" },
+  GB: { name: "United Kingdom", lines: [["116123", "116 123", "Samaritans — free, any time"]], emergency: "999" },
+  IE: { name: "Ireland", lines: [["116123", "116 123", "Samaritans — free, any time"]], emergency: "112" },
+  AU: { name: "Australia", lines: [["131114", "13 11 14", "Lifeline — any time (or text 0477 13 11 14)"]], emergency: "000" },
+  NZ: { name: "New Zealand", lines: [["1737", "1737", "Need to talk? — free call or text, any time"]], emergency: "111" },
+  FR: { name: "France", lines: [["3114", "3114", "Numéro national de prévention du suicide — gratuit, 24h/24"]], emergency: "112" },
+  ES: { name: "España", lines: [["024", "024", "Línea de atención a la conducta suicida — gratuita, 24 h"]], emergency: "112" },
+  NL: { name: "Nederland", lines: [["08000113", "0800-0113", "113 Zelfmoordpreventie — gratis, dag en nacht (of bel 113)"]], emergency: "112" },
+  DE: { name: "Deutschland", lines: [["08001110111", "0800 111 0 111", "TelefonSeelsorge — kostenlos, rund um die Uhr"], ["08001110222", "0800 111 0 222", "TelefonSeelsorge"]], emergency: "112" },
+  IN: { name: "India", lines: [["14416", "14416", "Tele-MANAS — free, any time, many languages"]], emergency: "112" },
+  BR: { name: "Brasil", lines: [["188", "188", "CVV — gratuito, 24 horas"]], emergency: "192" },
+  ZA: { name: "South Africa", lines: [["0800567567", "0800 567 567", "SADAG Suicide Crisis Helpline — any time"]], emergency: "112 (from a mobile) or 10111" },
+  MX: { name: "México", lines: [["8009112000", "800 911 2000", "Línea de la Vida — gratuita, 24 horas"]], emergency: "911" },
+};
+const FIND_A_HELPLINE = "https://findahelpline.com";
+const COUNTRY_KEY = "undercurrent.country";
+
+// Best guess from the time zone (then the language), unless the person picked one.
+function guessCountry() {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  const zones = [
+    [/^America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Detroit|Boise|Indiana|Kentucky|Juneau|Adak|Nome|Sitka|Menominee|North_Dakota)|^Pacific\/Honolulu|^America\/Puerto_Rico/, "US"],
+    [/^America\/(Toronto|Vancouver|Edmonton|Winnipeg|Halifax|St_Johns|Regina|Montreal|Moncton|Whitehorse|Yellowknife|Iqaluit|Glace_Bay|Goose_Bay|Dawson|Swift_Current|Rankin_Inlet|Cambridge_Bay)/, "CA"],
+    [/^Europe\/London/, "GB"], [/^Europe\/Dublin/, "IE"], [/^Australia\//, "AU"], [/^Pacific\/(Auckland|Chatham)/, "NZ"],
+    [/^Europe\/Paris/, "FR"], [/^(Europe\/Madrid|Atlantic\/Canary|Africa\/Ceuta)/, "ES"], [/^Europe\/Amsterdam/, "NL"],
+    [/^Europe\/(Berlin|Busingen)/, "DE"], [/^Asia\/(Kolkata|Calcutta)/, "IN"],
+    [/^America\/(Sao_Paulo|Bahia|Fortaleza|Recife|Manaus|Belem|Cuiaba|Porto_Velho|Rio_Branco|Maceio|Araguaina|Campo_Grande|Boa_Vista|Santarem|Noronha)/, "BR"],
+    [/^Africa\/Johannesburg/, "ZA"],
+    [/^America\/(Mexico_City|Cancun|Monterrey|Tijuana|Merida|Chihuahua|Hermosillo|Mazatlan|Matamoros|Bahia_Banderas|Ojinaga|Ciudad_Juarez)/, "MX"],
+  ];
+  for (const [rx, code] of zones) if (rx.test(tz)) return code;
+  const region = (navigator.language || "").split("-")[1]?.toUpperCase();
+  return HELPLINES[region] ? region : null;
+}
+function country() {
+  let picked = null;
+  try { picked = localStorage.getItem(COUNTRY_KEY); } catch {}
+  if (picked === "other") return null;
+  return HELPLINES[picked] ? picked : guessCountry();
+}
+
+// The lines for this person's country as HTML, or a pointer to the directory.
+function helplineHtml({ compact = false } = {}) {
+  const c = HELPLINES[country()];
+  if (!c) {
+    return compact
+      ? `<a href="${FIND_A_HELPLINE}" target="_blank" rel="noopener">Find a helpline</a>`
+      : `<a href="${FIND_A_HELPLINE}" target="_blank" rel="noopener">Find a free, confidential helpline in your country</a>.`;
+  }
+  const [tel, shown, about] = c.lines[0];
+  if (compact) return `<a href="tel:${tel}">${shown}</a> (${escapeHtml(about.split(" — ")[0])})`;
+  return c.lines.map(([t, sh, ab]) => `Call <a href="tel:${t}">${sh}</a> — ${escapeHtml(ab.split(" — ").slice(1).join(" — ") || ab)} <span class="faint">(${escapeHtml(ab.split(" — ")[0])})</span>`).join("<br>");
+}
+const emergencyText = () => HELPLINES[country()]?.emergency ?? "your local emergency number";
+
+function crisisHtml(lead) {
+  return `<b>${lead}</b><br>${helplineHtml()}<br>
+    If you might act on thoughts of hurting yourself or are in danger, call ${escapeHtml(emergencyText())} now.
+    <br><a href="#" data-open-plan>Open your safety plan</a>`;
+}
+const CRISIS_LEAD = "Thank you for answering honestly. You deserve support right now.";
+const SUPPORT_LEAD = "Some of what's here sounds really painful. You deserve support right now.";
+
+function renderHelplines() {
+  $("footer-help").innerHTML = `Having a hard time? ${helplineHtml({ compact: true })} · <a href="#" data-open-plan>My safety plan</a>`;
+  $("care-note").innerHTML = `That sounds really hard. You don't have to carry it alone — ${helplineHtml({ compact: true })}, or <a href="#" data-open-plan>open your safety plan</a>.`;
+}
+
+/* ---------- safety plan ---------- */
+// Steps follow the widely used safety-planning approach: notice the signs early, then
+// work outward from things you can do alone to people and professionals.
+const PLAN_SECTIONS = [
+  ["warning", "Warning signs", "Thoughts, feelings or situations that tell me a hard time may be starting."],
+  ["coping", "Things I can do on my own", "To get through a rough moment — a walk, music, a shower, breathing."],
+  ["distraction", "People and places that take my mind off things", "Somewhere to go or someone to be around, without having to talk about it."],
+  ["people", "People I can ask for help", "Who I can call or text when I need to talk.", "contacts"],
+  ["pros", "Professionals and services", "My therapist, doctor, or a crisis line.", "contacts"],
+  ["safer", "Making things safer", "Steps to keep myself safe when things are hard."],
+  ["reasons", "What matters most to me", "People, things or hopes worth holding on to."],
+];
+const metaStore = storeOf("meta");
+let plan = null; // { key: "safetyPlan", sections: {...}, updatedAt }
+const emptyPlan = () => ({ key: "safetyPlan", sections: Object.fromEntries(PLAN_SECTIONS.map(([k]) => [k, []])), updatedAt: 0 });
+
+function normalizePlan(raw) {
+  const p = emptyPlan();
+  if (!raw || typeof raw !== "object") return p;
+  for (const [k, , , kind] of PLAN_SECTIONS) {
+    const v = raw.sections?.[k];
+    if (!Array.isArray(v)) continue;
+    p.sections[k] = kind
+      ? v.filter((c) => c && typeof c === "object").map((c) => ({ name: String(c.name || "").slice(0, 80), phone: String(c.phone || "").slice(0, 40) })).filter((c) => c.name || c.phone)
+      : v.map((x) => String(x).slice(0, 300)).filter((x) => x.trim());
+  }
+  p.updatedAt = Number(raw.updatedAt) || 0;
+  return p;
+}
+async function loadPlan() { plan = normalizePlan(await metaStore.get("safetyPlan")); }
+const planIsEmpty = () => PLAN_SECTIONS.every(([k]) => !plan.sections[k].length);
+const telHref = (phone) => "tel:" + phone.replace(/[^\d+]/g, "");
+
+function openPlan(edit = false) {
+  renderPlan(edit || planIsEmpty());
+  if (!$("plan").open) $("plan").showModal();
+  $("plan-inner").scrollTop = 0; // "Need someone right now?" must always be the first thing in view
+}
+
+function renderPlan(edit) {
+  const code = country();
+  const countrySelect = `<label class="country">Helplines for
+    <select id="plan-country">${Object.entries(HELPLINES).map(([k, c]) => `<option value="${k}" ${k === code ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}
+      <option value="other" ${code ? "" : "selected"}>Somewhere else</option></select></label>`;
+  const now = `<div class="plan-now"><b>Need someone right now?</b><br>${helplineHtml()}<br>
+    In an emergency, call ${escapeHtml(emergencyText())}.<div>${countrySelect}</div></div>`;
+  const sections = PLAN_SECTIONS.map(([k, title, hint, kind], i) => {
+    const items = plan.sections[k];
+    let bodyHtml;
+    if (edit && kind) {
+      const rows = (items.length ? items : [{ name: "", phone: "" }]).map((c) => contactRow(c)).join("");
+      bodyHtml = `<div class="contacts" data-contacts="${k}">${rows}</div><button type="button" class="link-btn add-contact" data-add="${k}">+ Add someone</button>`;
+    } else if (edit) {
+      bodyHtml = `<textarea data-list="${k}" rows="3" placeholder="One per line">${escapeHtml(items.join("\n"))}</textarea>`;
+    } else if (!items.length) {
+      bodyHtml = `<p class="faint">Nothing here yet.</p>`;
+    } else if (kind) {
+      bodyHtml = `<ul class="plan-contacts">${items.map((c) => `<li><span>${escapeHtml(c.name)}</span>${c.phone ? `<a href="${telHref(c.phone)}">${escapeHtml(c.phone)}</a>` : ""}</li>`).join("")}</ul>`;
+    } else {
+      bodyHtml = `<ul>${items.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>`;
+    }
+    return `<section class="plan-step"><h4><span class="num">${i + 1}</span>${title}</h4><p class="hint">${hint}</p>${bodyHtml}</section>`;
+  }).join("");
+  $("plan-inner").innerHTML = `
+    <div class="sc-step">For hard moments</div>
+    <h3 id="plan-title">My safety plan</h3>
+    <p class="sc-lead">${edit ? "Fill this in when you're feeling steady, so it's ready when you need it. Only you can see it." : "Take it one step at a time. Start at the top."}</p>
+    ${now}
+    ${sections}
+    <div class="buttons">
+      ${edit ? `<button type="button" class="btn" id="plan-cancel">Cancel</button><button type="button" class="btn primary" id="plan-save">Save plan</button>`
+             : `<button type="button" class="btn" id="plan-edit">Edit</button><button type="button" class="btn primary" id="plan-close">Close</button>`}
+    </div>`;
+  $("plan-inner").dataset.edit = edit ? "1" : "";
+  $("plan-inner").scrollTop = 0;
+}
+const contactRow = (c) => `<div class="contact-row"><input type="text" placeholder="Name" value="${escapeHtml(c.name)}" maxlength="80" aria-label="Name" /><input type="tel" placeholder="Phone" value="${escapeHtml(c.phone)}" maxlength="40" aria-label="Phone" /></div>`;
+
+async function savePlan() {
+  const next = emptyPlan();
+  for (const [k, , , kind] of PLAN_SECTIONS) {
+    if (kind) {
+      next.sections[k] = [...$("plan-inner").querySelectorAll(`[data-contacts="${k}"] .contact-row`)].map((row) => {
+        const [name, phone] = row.querySelectorAll("input");
+        return { name: name.value.trim(), phone: phone.value.trim() };
+      });
+    } else {
+      next.sections[k] = $("plan-inner").querySelector(`[data-list="${k}"]`).value.split("\n");
+    }
+  }
+  next.updatedAt = Date.now();
+  plan = normalizePlan(next);
+  try {
+    await metaStore.put(plan);
+    channel?.postMessage({ type: "plan" });
+    toast("Safety plan saved.");
+  } catch (err) {
+    console.error(err);
+    toast("Couldn't save your plan — is storage blocked?");
+  }
+  renderPlan(false);
+}
+
+$("plan-inner").addEventListener("click", (e) => {
+  const id = e.target.id;
+  if (id === "plan-close") $("plan").close();
+  else if (id === "plan-edit") renderPlan(true);
+  else if (id === "plan-cancel") planIsEmpty() ? $("plan").close() : renderPlan(false);
+  else if (id === "plan-save") savePlan();
+  else if (e.target.dataset.add) $("plan-inner").querySelector(`[data-contacts="${e.target.dataset.add}"]`).insertAdjacentHTML("beforeend", contactRow({ name: "", phone: "" }));
+});
+$("plan-inner").addEventListener("change", (e) => {
+  if (e.target.id !== "plan-country") return;
+  try { localStorage.setItem(COUNTRY_KEY, e.target.value); } catch {}
+  renderHelplines();
+  renderPlan($("plan-inner").dataset.edit === "1");
+  channel?.postMessage({ type: "country" });
+});
+// Any "open your safety plan" link, anywhere — including inside dialogs.
+document.addEventListener("click", (e) => {
+  const link = e.target.closest("[data-open-plan]");
+  if (!link) return;
+  e.preventDefault();
+  if ($("screening").open) $("screening").close();
+  openPlan();
+});
+
 /* ---------- your data ---------- */
 async function openSettings() {
   if (dirty) await saveNow();
@@ -2010,6 +2240,7 @@ async function exportData() {
     exportedAt: new Date().toISOString(),
     entries: [...entries.values()].sort((a, b) => a.date.localeCompare(b.date)),
     screenings: [...screenings.values()].sort((a, b) => a.takenAt - b.takenAt),
+    safetyPlan: planIsEmpty() ? null : plan,
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
@@ -2043,6 +2274,13 @@ async function importData(file) {
     await screeningStore.put(n);
     screenings.set(n.id, n);
     results++;
+  }
+  if (data.safetyPlan) {
+    const incoming = normalizePlan(data.safetyPlan);
+    if (incoming.updatedAt > plan.updatedAt && PLAN_SECTIONS.some(([k]) => incoming.sections[k].length)) {
+      plan = incoming;
+      await metaStore.put(plan);
+    }
   }
   updateBanner();
   channel?.postMessage({ type: "reload" });
@@ -2114,7 +2352,9 @@ window.addEventListener("resize", () => { if (mode === "write") autosize(); });
 
 // Another tab changed something: pick it up, unless we're mid-edit on that day.
 channel?.addEventListener("message", async ({ data }) => {
-  if (data.type === "reload") { await loadAll(); openDay(current); updateBanner(); return; }
+  if (data.type === "reload") { await loadAll(); openDay(current); updateBanner(); renderHelplines(); return; }
+  if (data.type === "plan") { await loadPlan(); if ($("plan").open && $("plan-inner").dataset.edit !== "1") renderPlan(false); return; }
+  if (data.type === "country") { renderHelplines(); return; }
   if (data.type === "screenings") { await loadScreenings(); updateBanner(); if (!$("trends").hidden) renderTrends(); return; }
   const entry = await store.get(data.date);
   entry ? entries.set(data.date, normalize(entry)) : entries.delete(data.date);
@@ -2138,9 +2378,11 @@ async function loadAll() {
   entries.clear();
   for (const e of await store.all()) entries.set(e.date, normalize(e));
   await loadScreenings();
+  await loadPlan();
 }
 
 buildCheckin();
+renderHelplines();
 // The entrance animation is for page load only; don't replay it when views switch.
 document.querySelectorAll(".rise").forEach((el) =>
   el.addEventListener("animationend", () => el.classList.remove("rise", "d1", "d2", "d3"), { once: true }));

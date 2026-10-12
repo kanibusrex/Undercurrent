@@ -392,7 +392,7 @@ await test("upgrading an existing database moves anxiety to 0–4", async () => 
       all.onsuccess = () => resolve({ version: req.result.version, rows: all.result.map((e) => e.anxiety ?? null) });
     };
   }));
-  assert(stored.version === 3, "db version " + stored.version);
+  assert(stored.version === 4, "db version " + stored.version);
   assert(JSON.stringify(stored.rows.sort()) === JSON.stringify([1, null].sort()), "stored: " + JSON.stringify(stored.rows));
   await ctx.close();
 });
@@ -735,6 +735,128 @@ await phone4.screenshot({ path: join(shots, "reflect-phone.png"), fullPage: true
 await test("no page errors (AI)", async () => {
   assert(!errors.length, errors.join("; "));
 });
+
+/* ---------- step 4a: helplines and safety plan ---------- */
+console.log("Helplines & safety plan");
+async function pageIn(timezoneId, opts = {}) {
+  const c = await browser.newContext({ timezoneId, locale: opts.locale || "en-US", viewport: opts.viewport || { width: 1280, height: 900 }, acceptDownloads: true, ...(opts.mobile ? { isMobile: true, hasTouch: true } : {}) });
+  const pg = await c.newPage();
+  pg.on("pageerror", (e) => errors.push(e.message));
+  await pg.goto(url);
+  await pg.waitForSelector("#footer-help a");
+  return pg;
+}
+
+await test("helplines follow the time zone", async () => {
+  const cases = [["America/Chicago", "988"], ["Europe/London", "116 123"], ["Australia/Sydney", "13 11 14"], ["Europe/Paris", "3114"], ["Asia/Kolkata", "14416"]];
+  for (const [tz, number] of cases) {
+    const pg = await pageIn(tz);
+    const footer = await pg.textContent("#footer-help");
+    assert(footer.includes(number), `${tz}: ${footer}`);
+    await pg.context().close();
+  }
+});
+
+await test("countries without a listed line point to the directory", async () => {
+  const pg = await pageIn("Asia/Tokyo", { locale: "ja-JP" });
+  assert((await pg.getAttribute("#footer-help a", "href")) === "https://findahelpline.com", "directory link");
+  await pg.context().close();
+});
+
+const p5 = await pageIn("Europe/London");
+await test("the support note uses the local line and links to the plan", async () => {
+  await p5.click('.scale[data-field="mood"] button[data-value="1"]');
+  const note = await p5.textContent("#care-note");
+  assert(note.includes("116 123") && !note.includes("988") && note.includes("safety plan"), note);
+  await p5.click('.scale[data-field="mood"] button[data-value="1"]');
+});
+
+await test("an empty safety plan opens ready to fill in", async () => {
+  await p5.click('#footer-help a[data-open-plan]');
+  assert(await p5.isVisible("#plan"), "plan open");
+  assert(await p5.isVisible('#plan textarea[data-list="warning"]'), "edit mode for an empty plan");
+  assert((await p5.textContent(".plan-now")).includes("116 123") && (await p5.textContent(".plan-now")).includes("999"), "UK line and emergency number");
+  assert((await p5.$$("#plan .plan-step")).length === 7, "seven steps");
+});
+
+await test("the plan saves, survives a reload, and makes numbers tappable", async () => {
+  await p5.fill('#plan textarea[data-list="warning"]', "Not sleeping\nSkipping meals\n\n");
+  await p5.fill('#plan textarea[data-list="coping"]', "Walk by the river");
+  await p5.fill('#plan [data-contacts="people"] .contact-row input[type="text"]', "Dana");
+  await p5.fill('#plan [data-contacts="people"] .contact-row input[type="tel"]', "+44 7700 900123");
+  await p5.click('#plan [data-add="people"]');
+  await p5.fill('#plan [data-contacts="people"] .contact-row:nth-child(2) input[type="text"]', "My sister");
+  await p5.click("#plan-save");
+  await p5.waitForSelector("#plan-edit");
+  await p5.click("#plan-close");
+  await p5.reload();
+  await p5.click('#footer-help a[data-open-plan]');
+  await p5.waitForSelector("#plan-edit"); // opens in view mode once filled in
+  const text = await p5.textContent("#plan-inner");
+  assert(text.includes("Not sleeping") && text.includes("Skipping meals") && text.includes("Walk by the river") && text.includes("My sister"), text);
+  assert((await p5.$$('.plan-step:first-of-type li')).length === 2 || (await p5.$$eval(".plan-step", (els) => els[0].querySelectorAll("li").length)) === 2, "blank lines dropped");
+  assert((await p5.getAttribute(".plan-contacts a", "href")) === "tel:+447700900123", "tel link cleaned up");
+});
+
+await test("picking a different country updates the plan and the footer, and sticks", async () => {
+  await p5.selectOption("#plan-country", "IE");
+  assert((await p5.textContent(".plan-now")).includes("112"), "Irish emergency number");
+  await p5.selectOption("#plan-country", "CA");
+  assert((await p5.textContent("#footer-help")).includes("9-8-8"), "footer follows");
+  await p5.click("#plan-close");
+  await p5.reload();
+  assert((await p5.textContent("#footer-help")).includes("9-8-8"), "still Canada after reload");
+  await p5.click('#footer-help a[data-open-plan]');
+  await p5.selectOption("#plan-country", "GB");
+  await p5.click("#plan-close");
+});
+
+await test("crisis messages in the questionnaire link to the plan", async () => {
+  await p5.click("#banner-start");
+  await p5.click('#sc-inner li[data-i="8"] .sc-opts button[data-v="2"]');
+  const card = await p5.textContent("#sc-crisis");
+  assert(card.includes("116 123") && card.includes("999"), card);
+  await p5.click("#sc-crisis [data-open-plan]");
+  assert(!(await p5.evaluate(() => document.querySelector("#screening").open)), "questionnaire closed");
+  assert(await p5.isVisible("#plan"), "plan open");
+  await p5.click("#plan-close");
+});
+
+await test("the plan goes into backups and comes back", async () => {
+  await p5.click("#open-settings");
+  const [download] = await Promise.all([p5.waitForEvent("download"), p5.click("#export")]);
+  const backup = JSON.parse(await readFile(await download.path(), "utf8"));
+  await p5.click("#close-settings");
+  assert(backup.safetyPlan?.sections.warning.length === 2, JSON.stringify(backup.safetyPlan));
+  const fresh = await pageIn("Europe/London");
+  const file = join(shots, "with-plan.json");
+  await writeFile(file, JSON.stringify(backup));
+  await fresh.setInputFiles("#import-file", file);
+  await fresh.waitForFunction(() => document.querySelector("#toast").textContent.includes("Restored"));
+  await fresh.click('#footer-help a[data-open-plan]');
+  assert((await fresh.textContent("#plan-inner")).includes("Walk by the river"), "plan restored");
+  await fresh.context().close();
+});
+await test("the plan always opens at the top, with help first", async () => {
+  await p5.click('#footer-help a[data-open-plan]');
+  await p5.evaluate(() => { document.querySelector("#plan-inner").scrollTop = 9999; });
+  await p5.click("#plan-close");
+  await p5.click('#footer-help a[data-open-plan]');
+  assert((await p5.evaluate(() => document.querySelector("#plan-inner").scrollTop)) === 0, "scrolled to top");
+});
+await p5.waitForTimeout(200);
+await p5.screenshot({ path: join(shots, "plan.png") });
+await p5.click("#plan-close");
+
+const phone5 = await pageIn("America/Toronto", { viewport: { width: 390, height: 844 }, mobile: true });
+await test("the safety plan fits on a phone", async () => {
+  await phone5.click('#footer-help a[data-open-plan]');
+  const bad = await phone5.evaluate(() => [...document.querySelectorAll("#plan, #plan *")]
+    .filter((el) => el.getClientRects().length && el.getBoundingClientRect().right > 390.5).map((el) => el.className || el.tagName));
+  assert(!bad.length, "off-screen: " + bad.join(", "));
+  assert((await phone5.textContent(".plan-now")).includes("9-8-8"), "Canadian line");
+});
+await phone5.screenshot({ path: join(shots, "plan-phone.png") });
 
 await browser.close();
 server.close();
