@@ -17,7 +17,10 @@ A private journal for noticing your mood, anxiety, and what's going on underneat
 - **Timeline & search** — browse past days by month, or search everything you've written.
 - **Read mode** — entries support light Markdown (headings, **bold**, *italic*, lists, quotes).
 - **Private & offline** — an installable PWA. Entries live in your browser's IndexedDB; there's no server and no account.
-- **Backups** — export every entry to a JSON file and restore it anytime from **Your data**.
+- **Passphrase lock (optional)** — encrypts everything Undercurrent stores on your device. Locks itself after a stretch of inactivity, and the lock screen still shows your local helpline and, if you choose, your safety plan.
+- **Safety plan** — your own warning signs, coping steps, people to call (tap to call) and reasons to keep going, ready for hard moments.
+- **Helplines where you are** — crisis lines for 14 countries, picked from your time zone or chosen by you; a directory and your local emergency number everywhere else.
+- **Backups** — export everything to a file and restore it anytime from **Your data**. With the lock on, backups are always encrypted; otherwise you can protect one with a passphrase. A gentle reminder appears if you haven't backed up in a month.
 
 ### On-device AI
 
@@ -32,6 +35,12 @@ Open the live app and choose **Install** / **Add to Home Screen** in your browse
 ## Privacy
 
 There is no backend. Journal entries are stored only in this browser's IndexedDB on this device, and the service worker only caches the app itself. Clearing your browser's site data deletes your entries, so export a backup now and then.
+
+### How the lock works
+
+When you turn the lock on, Undercurrent creates a random 256-bit AES-GCM key and encrypts every record with it — entries, check-ins, questionnaire results, AI recaps and search data. That key is stored only in wrapped (encrypted) form, under a key derived from your passphrase with PBKDF2-SHA256 (600,000 iterations); the passphrase itself is never stored. Changing the passphrase re-wraps the key without re-encrypting the journal. Turning the lock on or off rewrites everything in a single database transaction, so it's all-or-nothing.
+
+There's no recovery: if you forget your passphrase, the journal can't be decrypted — only erased. Keep a backup. An encrypted backup opens with the passphrase you had when you made it. Dates of entries remain visible (they're used as record keys); their contents are not.
 
 ## Not a substitute for care
 

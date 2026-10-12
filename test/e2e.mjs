@@ -397,7 +397,7 @@ await test("upgrading an existing database moves anxiety to 0–4", async () => 
   await ctx.close();
 });
 
-await test("new backups are version 3 and import without shifting", async () => {
+await test("new backups are version 4 and import without shifting", async () => {
   const ctx = await browser.newContext({ acceptDownloads: true });
   const pg = await ctx.newPage();
   await pg.goto(url);
@@ -406,7 +406,7 @@ await test("new backups are version 3 and import without shifting", async () => 
   await pg.click("#open-settings");
   const [download] = await Promise.all([pg.waitForEvent("download"), pg.click("#export")]);
   const backup = JSON.parse(await readFile(await download.path(), "utf8"));
-  assert(backup.version === 3 && backup.entries[0].anxiety === 0, JSON.stringify(backup));
+  assert(backup.version === 4 && backup.entries[0].anxiety === 0, JSON.stringify(backup));
   await pg.click("#close-settings");
   await pg.click(scaleBtn("anxiety", 0)); // clear, then restore from the backup
   await pg.waitForFunction(() => document.querySelector("#status").textContent === "Not written yet");
@@ -1065,6 +1065,154 @@ await test("the lock screen fits on a phone", async () => {
 await phone6.screenshot({ path: join(shots, "lock-phone.png") });
 
 await test("no page errors (lock)", async () => {
+  assert(!errors.length, errors.join("; "));
+});
+
+/* ---------- step 4c: encrypted backups and the reminder ---------- */
+console.log("Backups");
+const ctx7 = await browser.newContext({ timezoneId: "America/Chicago", viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+const p7 = await ctx7.newPage();
+p7.on("pageerror", (e) => errors.push(e.message));
+await p7.goto(url);
+const BSECRET = "teal-heron-backup-secret";
+const exportFile = async (pg) => {
+  const [download] = await Promise.all([pg.waitForEvent("download"), pg.click("#export")]);
+  return { name: download.suggestedFilename(), text: await readFile(await download.path(), "utf8") };
+};
+const freshPage = async () => {
+  const c = await browser.newContext({ timezoneId: "America/Chicago" });
+  const pg = await c.newPage();
+  pg.on("pageerror", (e) => errors.push(e.message));
+  await pg.goto(url);
+  await pg.waitForSelector("#footer-help a");
+  return pg;
+};
+
+await test("after five entries with no backup, a gentle reminder appears", async () => {
+  await p7.click("#banner-later"); // the questionnaire nudge comes first; set it aside
+  for (let i = 4; i >= 0; i--) {
+    await p7.evaluate((n) => openDay(addDays(todayKey(), -n)), i);
+    await p7.click("#mode-write");
+    await p7.fill("#text", i === 0 ? `Entry with the ${BSECRET}.` : `Day ${i}`);
+    await p7.waitForFunction(() => document.querySelector("#status").textContent.startsWith("Saved"));
+  }
+  await p7.waitForSelector("#backup-banner", { state: "visible" });
+  await p7.click("#backup-later");
+  assert(await p7.isHidden("#backup-banner"), "snoozed");
+  await p7.evaluate(() => localStorage.removeItem("undercurrent.backupSnoozedUntil"));
+  await p7.reload();
+  await p7.waitForSelector("#backup-banner", { state: "visible" });
+});
+
+await test("'Back up now' opens the backup options; exporting clears the reminder", async () => {
+  await p7.click("#backup-now");
+  await p7.waitForSelector("#settings[open]");
+  const f = await exportFile(p7);
+  assert(f.text.includes(BSECRET) && !f.name.includes("encrypted"), "plain backup by default");
+  await p7.click("#close-settings");
+  assert(await p7.isHidden("#backup-banner"), "reminder gone");
+});
+
+let protectedFile;
+await test("a backup can be protected with a passphrase", async () => {
+  await p7.click("#open-settings"); await p7.waitForSelector("#settings[open]");
+  await p7.check("#export-protect");
+  await p7.fill("#export-pass", "short");
+  await p7.fill("#export-pass2", "short");
+  await p7.click("#export");
+  assert((await p7.textContent("#export-error")).includes("8 characters"), "too short");
+  await p7.fill("#export-pass", "maple window ocean drum");
+  await p7.fill("#export-pass2", "maple window ocean drum");
+  protectedFile = await exportFile(p7);
+  await p7.click("#close-settings");
+  const parsed = JSON.parse(protectedFile.text);
+  assert(parsed.encrypted && !parsed.entries && protectedFile.name.includes("encrypted"), "encrypted file");
+  assert(!protectedFile.text.includes(BSECRET) && !protectedFile.text.includes("maple window"), "no plaintext, no passphrase");
+});
+
+await test("importing a protected backup asks for its passphrase", async () => {
+  const pg = await freshPage();
+  const file = join(shots, "protected.json");
+  await writeFile(file, protectedFile.text);
+  await pg.setInputFiles("#import-file", file);
+  await pg.waitForSelector("#import-pass-dialog[open]");
+  await pg.fill("#import-pass", "wrong guess entirely");
+  await pg.click("#import-pass-go");
+  await pg.waitForFunction(() => document.querySelector("#import-pass-error").textContent.includes("didn't open"), null, { timeout: 60000 });
+  await pg.fill("#import-pass", "maple window ocean drum");
+  await pg.click("#import-pass-go");
+  await pg.waitForFunction(() => document.querySelector("#toast").textContent.includes("5 new"), null, { timeout: 60000 });
+  assert((await pg.inputValue("#text")).includes(BSECRET), "restored");
+  await pg.context().close();
+});
+
+await test("cancelling the passphrase prompt imports nothing", async () => {
+  const pg = await freshPage();
+  const file = join(shots, "protected.json");
+  await pg.setInputFiles("#import-file", file);
+  await pg.waitForSelector("#import-pass-dialog[open]");
+  await pg.click("#import-pass-cancel");
+  assert((await pg.textContent("#stats")).includes("will appear here"), "nothing imported");
+  await pg.context().close();
+});
+
+let lockedBackup;
+await test("with the lock on, every backup is encrypted with the lock's passphrase", async () => {
+  await p7.click("#open-settings"); await p7.waitForSelector("#settings[open]");
+  await p7.click("#lock-setting-btn");
+  await p7.fill("#pass-new", "copper meadow lamp nine");
+  await p7.fill("#pass-confirm", "copper meadow lamp nine");
+  await p7.check("#pass-ack");
+  await p7.click("#pass-go");
+  await p7.waitForFunction(() => !document.querySelector("#pass-dialog").open, null, { timeout: 60000 });
+  assert(await p7.isHidden("#export-protect-row"), "no choice to make: it's always encrypted");
+  lockedBackup = await exportFile(p7);
+  await p7.click("#close-settings");
+  assert(JSON.parse(lockedBackup.text).encrypted && !lockedBackup.text.includes(BSECRET), "encrypted");
+  const pg = await freshPage();
+  const file = join(shots, "locked.json");
+  await writeFile(file, lockedBackup.text);
+  await pg.setInputFiles("#import-file", file);
+  await pg.waitForSelector("#import-pass-dialog[open]");
+  await pg.fill("#import-pass", "copper meadow lamp nine");
+  await pg.click("#import-pass-go");
+  await pg.waitForFunction(() => document.querySelector("#toast").textContent.includes("5 new"), null, { timeout: 60000 });
+  await pg.context().close();
+});
+
+await test("restoring into a locked journal keeps it encrypted", async () => {
+  await p7.click("#open-settings"); await p7.waitForSelector("#settings[open]");
+  const file = join(shots, "protected.json");
+  await p7.setInputFiles("#import-file", file);
+  await p7.waitForSelector("#import-pass-dialog[open]");
+  await p7.fill("#import-pass", "maple window ocean drum");
+  await p7.click("#import-pass-go");
+  await p7.waitForFunction(() => document.querySelector("#toast").textContent.includes("Restored"), null, { timeout: 60000 });
+  const dump = await rawDump(p7);
+  assert(!dump.includes(BSECRET), "imported entries were encrypted on the way in");
+  await p7.click("#close-settings");
+});
+await p7.click("#open-settings"); await p7.waitForSelector("#settings[open]");
+await p7.screenshot({ path: join(shots, "settings-locked.png") });
+await p7.click("#close-settings");
+
+
+const phone7 = await (await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })).newPage();
+await phone7.goto(url);
+await test("settings and the passphrase dialog fit on a phone", async () => {
+  const off = (sel) => phone7.evaluate((sel) => [...document.querySelectorAll(sel)]
+    .filter((el) => el.getClientRects().length && el.getBoundingClientRect().right > 390.5).map((el) => el.id || el.className || el.tagName), sel);
+  await phone7.click("#open-settings"); await phone7.waitForSelector("#settings[open]");
+  await phone7.check("#export-protect");
+  let bad = await off("#settings, #settings *");
+  assert(!bad.length, "settings off-screen: " + bad.join(", "));
+  await phone7.click("#lock-setting-btn");
+  bad = await off("#pass-dialog, #pass-dialog *");
+  assert(!bad.length, "passphrase dialog off-screen: " + bad.join(", "));
+});
+await phone7.screenshot({ path: join(shots, "pass-phone.png") });
+
+await test("no page errors (backups)", async () => {
   assert(!errors.length, errors.join("; "));
 });
 

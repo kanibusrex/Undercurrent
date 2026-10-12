@@ -188,7 +188,7 @@
   dialog .row:first-of-type { margin-top: 1rem; }
   dialog .row small { display: block; color: var(--text-faint); font-size: 0.78rem; margin-top: 0.15rem; }
   dialog .buttons { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.2rem; }
-  .btn { border-radius: 999px; padding: 0.55rem 1.1rem; font-size: 0.85rem; font-weight: 500; cursor: pointer; border: 1px solid var(--glass-border); background: var(--glass); color: var(--text); }
+  .btn { white-space: nowrap; border-radius: 999px; padding: 0.55rem 1.1rem; font-size: 0.85rem; font-weight: 500; cursor: pointer; border: 1px solid var(--glass-border); background: var(--glass); color: var(--text); }
   .btn:hover { background: var(--glass-strong); }
   .btn.primary { background: var(--accent); color: #062a2a; border-color: transparent; }
   .btn.danger { background: rgba(253, 164, 175, 0.15); color: var(--danger); border-color: rgba(253, 164, 175, 0.35); }
@@ -428,6 +428,14 @@
   .lock-actions { display: flex; gap: 0.5rem; margin-top: 0.7rem; }
   dialog p + p { margin-top: 0.6rem; }
 
+
+  .export-protect { padding: 0 0 0.8rem; }
+  .export-protect[hidden], .export-pass[hidden] { display: none; }
+  .export-protect .check { margin-top: 0; }
+  .export-pass { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; margin-top: 0.5rem; }
+  .export-pass input { background: var(--field); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text); font: inherit; font-size: 0.88rem; padding: 0.5rem 0.7rem; min-width: 0; }
+  #settings { max-height: calc(100vh - 2rem); overflow-y: auto; }
+
   @media (max-width: 780px) {
     .layout { grid-template-columns: 1fr; }
     #toggle-list { display: inline-flex; }
@@ -509,6 +517,11 @@
         <span class="grow"><b>Two-week check-in.</b> 16 short questions about how the last two weeks have been — about 3 minutes.</span>
         <button class="btn small primary" id="banner-start">Start</button>
         <button class="btn small" id="banner-later">Not now</button>
+      </div>
+      <div class="banner" id="backup-banner" hidden>
+        <span class="grow"><b>Back up your journal?</b> It only lives in this browser — a backup file keeps it safe if anything happens to it.</span>
+        <button class="btn small primary" id="backup-now">Back up now</button>
+        <button class="btn small" id="backup-later">Later</button>
       </div>
       <div class="day-nav">
         <button class="icon-btn" id="prev-day" aria-label="Previous day" title="Previous day (Alt+←)">
@@ -610,7 +623,7 @@
   <div class="lock-options" id="lock-options" hidden>
     <label>Lock automatically after
       <select id="autolock"><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="60">1 hour</option><option value="0">Never</option></select></label>
-    <label class="check"><input type="checkbox" id="plan-on-lock" /> Show my safety plan on the lock screen <small>so it's there when you need it most</small></label>
+    <label class="check"><input type="checkbox" id="plan-on-lock" /><span>Show my safety plan on the lock screen <small>so it's there when you need it most</small></span></label>
     <div class="lock-actions"><button class="btn small" id="lock-now">Lock now</button><button class="btn small" id="lock-change">Change passphrase</button></div>
   </div>
   <div class="row">
@@ -618,8 +631,16 @@
     <button class="btn" id="ai-setting-btn"></button>
   </div>
   <div class="row">
-    <div>Back up<small>Download every entry as a file.</small></div>
+    <div>Back up<small id="export-detail">Download every entry as a file.</small></div>
     <button class="btn" id="export">Export</button>
+  </div>
+  <div class="export-protect" id="export-protect-row">
+    <label class="check"><input type="checkbox" id="export-protect" /> Protect the file with a passphrase</label>
+    <div class="export-pass" id="export-pass-fields" hidden>
+      <input type="password" id="export-pass" placeholder="Passphrase" autocomplete="new-password" aria-label="Backup passphrase" />
+      <input type="password" id="export-pass2" placeholder="Type it again" autocomplete="new-password" aria-label="Backup passphrase again" />
+    </div>
+    <div class="lock-error" id="export-error" role="alert"></div>
   </div>
   <div class="row">
     <div>Restore<small>Add entries from a backup. Newer versions win.</small></div>
@@ -656,6 +677,16 @@
   <p>To start over with an empty journal on this device, type <b>erase</b> below. This permanently deletes everything stored here.</p>
   <label class="field">Type “erase” to confirm<input type="text" id="erase-confirm" autocomplete="off" /></label>
   <div class="buttons"><button class="btn" id="forgot-cancel">Keep trying</button><button class="btn danger" id="erase-go" disabled>Erase and start over</button></div>
+</dialog>
+
+<dialog id="import-pass-dialog" aria-labelledby="import-pass-title">
+  <form id="import-pass-form" autocomplete="off">
+    <h3 id="import-pass-title">This backup is encrypted</h3>
+    <p>Enter the passphrase it was made with — the one you had when you exported it.</p>
+    <label class="field">Passphrase<input type="password" id="import-pass" autocomplete="current-password" /></label>
+    <div class="lock-error" id="import-pass-error" role="alert"></div>
+    <div class="buttons"><button type="button" class="btn" id="import-pass-cancel">Cancel</button><button type="submit" class="btn primary" id="import-pass-go">Open backup</button></div>
+  </form>
 </dialog>
 
 <dialog id="confirm-delete">
@@ -992,6 +1023,7 @@ async function saveNow() {
   }
   updateFooter();
   renderList();
+  updateBanner();
   if (!$("trends").hidden) renderTrends();
 }
 
@@ -1668,10 +1700,22 @@ function screeningDue() {
   return Date.now() - last >= SCREEN_EVERY_DAYS * 86400000;
 }
 function updateBanner() {
-  let snoozed = 0;
-  try { snoozed = Number(localStorage.getItem(SNOOZE_KEY)) || 0; } catch {}
+  let snoozed = 0, lastBackup = 0, backupSnoozed = 0;
+  try {
+    snoozed = Number(localStorage.getItem(SNOOZE_KEY)) || 0;
+    lastBackup = Number(localStorage.getItem(BACKUP_KEY)) || 0;
+    backupSnoozed = Number(localStorage.getItem(BACKUP_SNOOZE_KEY)) || 0;
+  } catch {}
   $("screen-banner").hidden = !(screeningDue() && Date.now() >= snoozed);
+  // One nudge at a time: the backup reminder waits for the questionnaire one.
+  const backupDue = entries.size >= 5 && Date.now() - lastBackup > 30 * 86400000 && Date.now() >= backupSnoozed;
+  $("backup-banner").hidden = !($("screen-banner").hidden && backupDue);
 }
+$("backup-now").addEventListener("click", () => openSettings());
+$("backup-later").addEventListener("click", () => {
+  try { localStorage.setItem(BACKUP_SNOOZE_KEY, String(Date.now() + 7 * 86400000)); } catch {}
+  updateBanner();
+});
 $("banner-start").addEventListener("click", () => startScreening());
 $("banner-later").addEventListener("click", () => {
   try { localStorage.setItem(SNOOZE_KEY, String(Date.now() + 3 * 86400000)); } catch {}
@@ -2485,7 +2529,7 @@ let passMode = null;
 function openPassDialog(mode) {
   passMode = mode;
   const copy = {
-    enable: ["Lock your journal", "Choose a passphrase. A few unrelated words are strong and easy to remember — like “river lantern seven toast”.", "Turn on lock"],
+    enable: ["Lock your journal", "Choose a passphrase. A few unrelated words are strong and easy to remember — something like “river lantern seven toast”, but pick your own.", "Turn on lock"],
     change: ["Change your passphrase", "Your journal stays encrypted; only the passphrase changes.", "Change passphrase"],
     disable: ["Turn off the lock", "Your journal will be stored without encryption on this device.", "Turn off lock"],
   }[mode];
@@ -2524,6 +2568,7 @@ $("pass-form").addEventListener("submit", async (e) => {
     $("pass-dialog").close();
     toast({ enable: "Your journal is now locked with your passphrase.", change: "Passphrase changed.", disable: "The lock is off." }[passMode]);
     renderLockSetting();
+    renderExportOptions();
   } catch (err) {
     console.error(err);
     fail(err?.name === "OperationError" ? "That current passphrase didn't work." : "Something went wrong: " + (err.message || err));
@@ -2555,32 +2600,117 @@ async function openSettings() {
     : "The browser may clear site data when space runs low. Installing the app usually turns this on.";
   renderAiSetting();
   renderLockSetting();
+  renderExportOptions();
   $("settings").showModal();
 }
 
-async function exportData() {
-  if (dirty) await saveNow();
-  const data = {
-    app: "undercurrent",
-    version: 3,
-    exportedAt: new Date().toISOString(),
+/* backups: plain JSON, or encrypted with a passphrase (always, when the lock is on) */
+const b64 = (bytes) => {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let s = "";
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const BACKUP_KEY = "undercurrent.lastBackup";
+const BACKUP_SNOOZE_KEY = "undercurrent.backupSnoozedUntil";
+
+function backupPayload() {
+  return {
     entries: [...entries.values()].sort((a, b) => a.date.localeCompare(b.date)),
     screenings: [...screenings.values()].sort((a, b) => a.takenAt - b.takenAt),
     safetyPlan: planIsEmpty() ? null : plan,
   };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+}
+
+// Encrypt the payload with `key`; the file carries `wrap` (the key, wrapped by a passphrase).
+async function encryptBackup(payload, key, wrap) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, utf8.encode(JSON.stringify(payload)));
+  return {
+    kdf: { name: "PBKDF2-SHA256", salt: b64(wrap.salt), iterations: wrap.iterations },
+    key: { iv: b64(wrap.iv), wrapped: b64(wrap.wrapped) },
+    payload: { iv: b64(iv), data: b64(data) },
+  };
+}
+async function decryptBackup(enc, passphrase) {
+  const wrap = { salt: unb64(enc.kdf.salt), iterations: enc.kdf.iterations, iv: unb64(enc.key.iv), wrapped: unb64(enc.key.wrapped) };
+  const key = await unwrapDataKey(wrap, passphrase); // throws on a wrong passphrase
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(enc.payload.iv) }, key, unb64(enc.payload.data));
+  return JSON.parse(unutf8.decode(plain));
+}
+
+function renderExportOptions() {
+  $("export-detail").textContent = lockSettings
+    ? "Download every entry as a file, encrypted with your passphrase."
+    : "Download every entry as a file.";
+  $("export-protect-row").hidden = !!lockSettings;
+  $("export-pass-fields").hidden = !$("export-protect").checked;
+  $("export-error").textContent = "";
+}
+$("export-protect").addEventListener("change", renderExportOptions);
+
+async function exportData() {
+  if (dirty) await saveNow();
+  const payload = backupPayload();
+  let file;
+  if (lockSettings) {
+    file = { app: "undercurrent", version: 4, exportedAt: new Date().toISOString(), encrypted: await encryptBackup(payload, dataKey, lockSettings) };
+  } else if ($("export-protect").checked) {
+    const pass = $("export-pass").value;
+    if (pass.length < 8) { $("export-error").textContent = "Use at least 8 characters — a few words is best."; return; }
+    if (pass !== $("export-pass2").value) { $("export-error").textContent = "The two passphrases don't match."; return; }
+    $("export-error").textContent = "";
+    const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+    file = { app: "undercurrent", version: 4, exportedAt: new Date().toISOString(), encrypted: await encryptBackup(payload, key, await wrapDataKey(key, pass)) };
+  } else {
+    file = { app: "undercurrent", version: 4, exportedAt: new Date().toISOString(), ...payload };
+  }
+  const blob = new Blob([JSON.stringify(file, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `undercurrent-backup-${todayKey()}.json`;
+  a.download = `undercurrent-backup-${todayKey()}${file.encrypted ? "-encrypted" : ""}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast(`Exported ${entries.size} entries${screenings.size ? ` and ${screenings.size} questionnaire results` : ""}.`);
+  try { localStorage.setItem(BACKUP_KEY, String(Date.now())); } catch {}
+  updateBanner();
+  toast(`Exported ${entries.size} entries${screenings.size ? ` and ${screenings.size} questionnaire results` : ""}${file.encrypted ? ", encrypted" : ""}.`);
+}
+
+// Ask for a backup's passphrase until it opens the file (or the person cancels).
+function askBackupPassphrase(enc) {
+  return new Promise((resolve) => {
+    $("import-pass").value = "";
+    $("import-pass-error").textContent = "";
+    const dialog = $("import-pass-dialog");
+    const done = (value) => { $("import-pass-form").onsubmit = null; $("import-pass-cancel").onclick = null; dialog.close(); resolve(value); };
+    $("import-pass-cancel").onclick = () => done(null);
+    $("import-pass-form").onsubmit = async (e) => {
+      e.preventDefault();
+      $("import-pass-go").disabled = true;
+      try {
+        done(await decryptBackup(enc, $("import-pass").value));
+      } catch {
+        $("import-pass-error").textContent = "That passphrase didn't open this backup.";
+        $("import-pass").select();
+      } finally {
+        $("import-pass-go").disabled = false;
+      }
+    };
+    dialog.showModal();
+    $("import-pass").focus();
+  });
 }
 
 async function importData(file) {
   if (dirty) await saveNow();
   let data;
   try { data = JSON.parse(await file.text()); } catch { toast("That file isn't a valid backup."); return; }
+  if (data?.app === "undercurrent" && data.encrypted) {
+    const payload = await askBackupPassphrase(data.encrypted);
+    if (!payload) return;
+    data = { ...data, ...payload };
+  }
   if (data?.app !== "undercurrent" || !Array.isArray(data.entries)) { toast("That file isn't an Undercurrent backup."); return; }
   let added = 0, updated = 0, skipped = 0;
   for (const e of data.entries) {

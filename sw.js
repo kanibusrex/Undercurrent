@@ -1,7 +1,7 @@
 /* Undercurrent service worker: offline app shell.
    Network-first for navigations (so updates arrive), stale-while-revalidate for the
    shell, fonts and the AI library. Journal entries live in IndexedDB and never pass through here. */
-const CACHE = "undercurrent-v2";
+const CACHE = "undercurrent-v3";
 const SHELL = [
   "./", "./index.html", "./ai.js", "./manifest.json",
   "./icon-32.png", "./icon-180.png", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png"
