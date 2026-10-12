@@ -88,6 +88,8 @@
 
   /* layout */
   .layout { display: grid; grid-template-columns: 300px 1fr; gap: 1.1rem; align-items: start; }
+  .layout > * { min-width: 0; } /* let columns shrink below their content's natural width */
+  #reflect-body { display: flex; flex-direction: column; gap: 1rem; }
   .card {
     background: var(--glass); border: 1px solid var(--glass-border); border-radius: 22px;
     backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); box-shadow: var(--shadow);
@@ -229,7 +231,7 @@
 
   /* trends */
   .trends { padding: clamp(1.2rem, 3.5vw, 2rem) clamp(1.1rem, 3.5vw, 2.2rem); display: flex; flex-direction: column; gap: 1.2rem; min-height: calc(100vh - 7rem); }
-  .trends[hidden], .editor[hidden] { display: none; }
+  .trends[hidden], .editor[hidden], .reflect[hidden] { display: none; }
   .trends-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
   .trends-head h2 { font-family: var(--serif); font-weight: 500; font-size: clamp(1.45rem, 4vw, 1.95rem); }
   #trends-body { display: flex; flex-direction: column; gap: 1.4rem; }
@@ -329,6 +331,43 @@
     .tiles.two { grid-template-columns: 1fr; }
   }
 
+
+  /* reflect & AI */
+  .reflect[hidden] { display: none; }
+  .ai-model { font-size: 0.76rem; color: var(--text-faint); }
+  .ai-link { color: var(--accent-2); font-size: 0.8rem; padding: 0; }
+  .ai-link:hover { color: var(--text); }
+  .ai-link:disabled { color: var(--text-faint); cursor: default; }
+  .ai-row[hidden], .suggestion[hidden] { display: none; }
+  .suggestion { font-size: 0.86rem; line-height: 1.5; color: var(--text-dim); background: rgba(125, 211, 252, 0.07); border: 1px solid rgba(125, 211, 252, 0.25); border-radius: 12px; padding: 0.65rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .suggestion b { color: var(--text); font-weight: 500; }
+  .suggestion .why { font-family: var(--serif); font-style: italic; }
+  .suggestion .buttons { display: flex; gap: 0.4rem; }
+  .panel { background: var(--field); border: 1px solid var(--glass-border); border-radius: 16px; padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.7rem; }
+  .panel h3 { font-size: 0.9rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+  .panel p, .panel li { font-size: 0.88rem; line-height: 1.55; color: var(--text-dim); }
+  .panel ul { padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.25rem; }
+  .ai-text { font-family: var(--serif); font-size: 1.08rem; line-height: 1.65; color: var(--text); white-space: pre-wrap; }
+  .ai-text:empty { display: none; }
+  .ai-meta { font-size: 0.74rem; color: var(--text-faint); }
+  .models { display: flex; flex-direction: column; gap: 0.4rem; }
+  .models label { display: flex; align-items: center; gap: 0.6rem; font-size: 0.86rem; color: var(--text-dim); background: var(--glass); border: 1px solid var(--glass-border); border-radius: 12px; padding: 0.55rem 0.75rem; cursor: pointer; }
+  .models label:has(input:checked) { border-color: var(--accent-2); color: var(--text); }
+  .models input { accent-color: var(--accent-2); }
+  .models .rec { margin-left: auto; font-size: 0.72rem; color: var(--accent-2); }
+  .progress { height: 6px; border-radius: 3px; background: var(--glass); overflow: hidden; }
+  .progress > div { height: 100%; background: var(--accent-2); width: 0; transition: width 0.3s; }
+  .progress-text { font-size: 0.76rem; color: var(--text-faint); }
+  .ask-form { display: flex; gap: 0.5rem; }
+  .ask-form input { flex: 1; min-width: 0; background: var(--field); border: 1px solid var(--glass-border); border-radius: 12px; color: var(--text); font: inherit; font-size: 0.92rem; padding: 0.6rem 0.8rem; }
+  .ask-form input::placeholder { color: var(--text-faint); }
+  .examples { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .examples button, .sources button { border-radius: 999px; border: 1px solid var(--glass-border); background: var(--glass); color: var(--text-dim); font-size: 0.76rem; padding: 0.28rem 0.65rem; cursor: pointer; }
+  .examples button:hover, .sources button:hover { background: var(--glass-strong); color: var(--text); }
+  .sources { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; font-size: 0.74rem; color: var(--text-faint); }
+  .week-pick { display: inline-flex; }
+  .reflect .crisis { margin-left: 0; }
+
   @media (max-width: 780px) {
     .layout { grid-template-columns: 1fr; }
     #toggle-list { display: inline-flex; }
@@ -343,6 +382,10 @@
   }
   @media (max-width: 420px) {
     .brand .tag { display: none; }
+  }
+  @media (max-width: 440px) {
+    .brand h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } /* logo only; name stays for screen readers */
+    .pill { padding: 0.55rem 0.62rem; }
   }
 </style>
 </head>
@@ -368,6 +411,10 @@
       <button class="pill" id="open-trends" aria-label="Trends" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-6 5-6 8-2s5 3 10-6"/></svg>
         <span class="label">Trends</span>
+      </button>
+      <button class="pill" id="open-reflect" aria-label="Reflect" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+        <span class="label">Reflect</span>
       </button>
       <button class="pill" id="open-settings" aria-label="Your data">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -417,6 +464,10 @@
           <span class="scale-name">What's affecting you?</span>
           <div class="chips" id="factors" role="group" aria-label="What's affecting you"></div>
         </div>
+        <div class="ai-row" id="ai-suggest-row" hidden>
+          <button class="link-btn ai-link" id="ai-suggest">✦ Suggest a check-in from what I wrote</button>
+        </div>
+        <div class="suggestion" id="suggestion" hidden></div>
         <p class="care-note" id="care-note" hidden>That sounds really hard. You don't have to carry it alone —
           <a href="https://findahelpline.com" target="_blank" rel="noopener">find someone to talk to</a>, or in the US call or text <a href="tel:988">988</a>.</p>
       </section>
@@ -453,6 +504,14 @@
       </div>
       <div id="trends-body"></div>
     </section>
+
+    <section class="trends reflect card" id="reflect" hidden aria-labelledby="reflect-title">
+      <div class="trends-head">
+        <h2 id="reflect-title">Reflect</h2>
+        <span class="ai-model" id="ai-model"></span>
+      </div>
+      <div id="reflect-body"></div>
+    </section>
   </div>
 
   <footer>
@@ -470,6 +529,10 @@
   <div class="row">
     <div>Protected storage<small id="persist-detail"></small></div>
     <span id="persist-status"></span>
+  </div>
+  <div class="row">
+    <div>On-device AI<small id="ai-setting-detail"></small></div>
+    <button class="btn" id="ai-setting-btn"></button>
   </div>
   <div class="row">
     <div>Back up<small>Download every entry as a file.</small></div>
@@ -769,6 +832,8 @@ function openDay(key, { focus = false } = {}) {
   draft = { mood: entry?.mood ?? null, anxiety: entry?.anxiety ?? null, factors: [...(entry?.factors ?? [])] };
   renderCheckin();
   showTrends(false);
+  hideSuggestion();
+  updateAiSuggest();
   $("day-title").textContent = longDate(key);
   $("day-rel").textContent = relative(key);
   $("next-day").disabled = key >= todayKey();
@@ -927,7 +992,7 @@ function renderCheckin() {
     scale.querySelector(".scale-word").textContent = value != null ? WORDS[field][value] : "";
   }
   $("factors").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(draft.factors.includes(b.dataset.factor))));
-  $("care-note").hidden = !(draft.mood === 1 || draft.anxiety === 4);
+  updateCareNote();
 }
 
 function setLevel(field, value) {
@@ -972,12 +1037,18 @@ const SVGNS = "http://www.w3.org/2000/svg";
 const fmt1 = (n) => n.toFixed(1);
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
-function showTrends(on) {
-  $("trends").hidden = !on;
-  document.querySelector(".editor").hidden = on;
-  $("open-trends").setAttribute("aria-pressed", String(on));
-  if (on) renderTrends();
+let view = "journal";
+function showView(next) {
+  view = next;
+  document.querySelector(".editor").hidden = next !== "journal";
+  $("trends").hidden = next !== "trends";
+  $("reflect").hidden = next !== "reflect";
+  $("open-trends").setAttribute("aria-pressed", String(next === "trends"));
+  $("open-reflect").setAttribute("aria-pressed", String(next === "reflect"));
+  if (next === "trends") renderTrends();
+  if (next === "reflect") renderReflect();
 }
+const showTrends = (on) => showView(on ? "trends" : "journal");
 
 function rangeKeys(days, endKey = todayKey()) {
   const keys = [];
@@ -1205,7 +1276,7 @@ function drawCharts(keys) {
 
 $("open-trends").addEventListener("click", async () => {
   if (dirty) await saveNow();
-  showTrends($("trends").hidden);
+  showView(view === "trends" ? "journal" : "trends");
   if (matchMedia("(max-width: 780px)").matches) toggleList(false);
 });
 $("range").addEventListener("click", (e) => {
@@ -1269,6 +1340,10 @@ const CRISIS_HTML = `<b>Thank you for answering honestly. You deserve support ri
   In the US, call or text <a href="tel:988">988</a> (Suicide &amp; Crisis Lifeline), any time.
   Elsewhere, <a href="https://findahelpline.com" target="_blank" rel="noopener">find a helpline in your country</a>.
   If you might act on these thoughts or are in danger, call your local emergency number now.`;
+const SUPPORT_HTML = `<b>Some of what's here sounds really painful. You deserve support right now.</b><br>
+  In the US, call or text <a href="tel:988">988</a> (Suicide &amp; Crisis Lifeline), any time.
+  Elsewhere, <a href="https://findahelpline.com" target="_blank" rel="noopener">find a helpline in your country</a>.
+  If you might act on thoughts of hurting yourself, call your local emergency number now.`;
 const SCREEN_EVERY_DAYS = 14;
 
 const screenings = new Map(); // id -> { id, type, date, takenAt, answers, difficulty, score }
@@ -1539,6 +1614,376 @@ $("trends-body").addEventListener("click", async (e) => {
   }
 });
 
+/* ---------- safety ---------- */
+// Language that always surfaces support, in the editor and around anything the AI does.
+// Deliberately simple and deterministic: it never depends on a model.
+const CRISIS_PATTERNS = [
+  /\bkill(ing)? myself\b/i, /\bsuicid/i, /\bend(ing)? (my|my own) li(fe|ves)\b/i, /\bend(ing)? it all\b/i,
+  /\bwant(ed)? to die\b/i, /\bwish i (was|were) dead\b/i, /\bbetter off dead\b/i, /\bbetter off without me\b/i,
+  /\b(hurt|harm|cut)(ting)? myself\b/i, /\bself[- ]?harm/i, /\bno reason to (live|go on)\b/i,
+  /\bdon'?t want to (be here|live|exist|wake up)\b/i, /\bcan'?t go on\b/i, /\bnot worth living\b/i, /\boverdos(e|ing)\b/i,
+];
+const crisisLanguage = (text) => CRISIS_PATTERNS.some((rx) => rx.test(text || ""));
+function updateCareNote() {
+  $("care-note").hidden = !(draft.mood === 1 || draft.anxiety === 4 || crisisLanguage(textEl.value));
+}
+
+/* ---------- on-device AI ---------- */
+const AI_KEY = "undercurrent.ai"; // this device's choice: { model, f16 } — the model lives in this browser
+let aiMod = null, aiDevice = null;
+const aiSettings = () => { try { return JSON.parse(localStorage.getItem(AI_KEY)) || null; } catch { return null; } };
+const saveAiSettings = (v) => { try { v ? localStorage.setItem(AI_KEY, JSON.stringify(v)) : localStorage.removeItem(AI_KEY); } catch {} };
+async function aiModule() { aiMod ??= await import("./ai.js"); return aiMod; }
+async function aiDetect() { aiDevice ??= await (await aiModule()).detect(); return aiDevice; }
+const shortDate = (key) => fromKey(key).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+const dayLine = (key) => fromKey(key).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+
+// Load the model if needed, reporting progress as (fraction, text).
+async function ensureAI(onProgress = () => {}) {
+  const cfg = aiSettings();
+  if (!cfg) throw new Error("AI is off");
+  const ai = await aiModule();
+  if (!ai.isLoaded()) {
+    onProgress(0, "Waking up the AI on this device…");
+    await ai.load(cfg.model, { f16: cfg.f16, onProgress });
+  }
+  return ai;
+}
+
+function progressUi(container) {
+  container.innerHTML = `<div class="progress"><div></div></div><div class="progress-text"></div>`;
+  const bar = container.querySelector(".progress > div"), text = container.querySelector(".progress-text");
+  return (fraction, label) => {
+    bar.style.width = Math.round(Math.min(1, Math.max(0, fraction)) * 100) + "%";
+    text.textContent = (label || "").replace(/\s*It can take a while.*$/, "");
+  };
+}
+
+// What the model sees for one day: the check-in in words, then the writing.
+function entryForModel(key, maxChars) {
+  const e = entries.get(key);
+  const bits = [];
+  if (e.mood != null) bits.push(`mood: ${MOOD_WORDS[e.mood].toLowerCase()}`);
+  if (e.anxiety != null) bits.push(`anxiety: ${ANXIETY_WORDS[e.anxiety].toLowerCase()}`);
+  if (e.factors.length) bits.push(`affecting: ${e.factors.join(", ")}`);
+  let text = e.text.trim().replace(/\n{3,}/g, "\n\n");
+  if (text.length > maxChars) text = text.slice(0, maxChars) + "…";
+  return `${dayLine(key)}${bits.length ? ` — ${bits.join("; ")}` : ""}\n${text || "(no writing, check-in only)"}`;
+}
+
+/* suggest a check-in from the entry */
+function updateAiSuggest() {
+  const show = !!aiSettings() && wordCount(textEl.value) >= 12;
+  $("ai-suggest-row").hidden = !show;
+}
+
+$("ai-suggest").addEventListener("click", async () => {
+  const btn = $("ai-suggest");
+  const date = current, text = textEl.value;
+  btn.disabled = true;
+  try {
+    const ai = await ensureAI((f) => { btn.textContent = `Waking up the AI… ${Math.round(f * 100)}%`; });
+    btn.textContent = "Reading what you wrote…";
+    const reply = await ai.chat([
+      { role: "system", content: ai.SYSTEM },
+      { role: "user", content: `Read this journal entry and suggest a check-in.
+Mood is 1-5 (1 very low, 2 low, 3 okay, 4 good, 5 great). Anxiety is 0-4 (0 calm, 1 mild, 2 moderate, 3 high, 4 severe).
+Factors: pick only from ${FACTORS.join(", ")} — only ones the entry actually mentions.
+Reply with JSON only: {"mood": n, "anxiety": n, "factors": [...], "why": "one short sentence"}
+
+Entry: """${text.slice(0, 6000)}"""` },
+    ], { maxTokens: 120, temperature: 0.2 });
+    if (date !== current) return; // the person moved on to another day
+    const json = ai.parseJson(reply);
+    const mood = validLevel("mood", Number(json?.mood));
+    const anxiety = validLevel("anxiety", Number(json?.anxiety));
+    const factors = Array.isArray(json?.factors) ? FACTORS.filter((f) => json.factors.some((x) => String(x).toLowerCase() === f.toLowerCase())) : [];
+    if (mood == null && anxiety == null) { toast("The AI couldn't suggest a check-in for this one."); return; }
+    showSuggestion({ mood, anxiety, factors, why: typeof json.why === "string" ? ai.guardReply(json.why) : "" });
+  } catch (err) {
+    console.error(err);
+    toast("The AI couldn't run: " + (await aiModule()).friendlyError(err));
+    (await aiModule()).unload();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "✦ Suggest a check-in from what I wrote";
+  }
+});
+
+let suggestion = null;
+function showSuggestion(sg) {
+  suggestion = sg;
+  const parts = [];
+  if (sg.mood != null) parts.push(`<b>Mood ${sg.mood} · ${MOOD_WORDS[sg.mood]}</b>`);
+  if (sg.anxiety != null) parts.push(`<b>Anxiety ${sg.anxiety} · ${ANXIETY_WORDS[sg.anxiety]}</b>`);
+  if (sg.factors.length) parts.push(escapeHtml(sg.factors.join(", ")));
+  $("suggestion").innerHTML = `<div>Suggested: ${parts.join(" · ")}</div>
+    ${sg.why ? `<div class="why">${escapeHtml(sg.why)}</div>` : ""}
+    <div class="buttons"><button class="btn small primary" id="sg-use">Use this</button><button class="btn small" id="sg-dismiss">Dismiss</button></div>`;
+  $("suggestion").hidden = false;
+}
+function hideSuggestion() { suggestion = null; $("suggestion").hidden = true; }
+$("suggestion").addEventListener("click", (e) => {
+  if (e.target.id === "sg-dismiss") hideSuggestion();
+  if (e.target.id === "sg-use" && suggestion) {
+    if (suggestion.mood != null) draft.mood = suggestion.mood;
+    if (suggestion.anxiety != null) draft.anxiety = suggestion.anxiety;
+    if (suggestion.factors.length) draft.factors = [...new Set([...draft.factors, ...suggestion.factors])];
+    hideSuggestion();
+    renderCheckin();
+    scheduleSave(150);
+    updateFooter();
+  }
+});
+
+/* reflect view */
+const weekStart = (key) => { const d = fromKey(key); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return dayKey(d); };
+let recapWeek = null;
+const EXAMPLES = ["What seems to help when I'm anxious?", "How has my sleep been lately?", "What have I been worrying about?", "When did I last feel really good?"];
+
+async function renderReflect() {
+  const body = $("reflect-body");
+  const cfg = aiSettings();
+  $("ai-model").textContent = cfg ? `${cfg.model} · running on this device` : "";
+  if (!cfg) {
+    body.innerHTML = `<p class="ai-meta">Checking what this device can do…</p>`;
+    const dev = await aiDetect();
+    if (!aiSettings()) body.innerHTML = setupHtml(dev);
+    return;
+  }
+  recapWeek ??= weekStart(todayKey());
+  const thisWeek = weekStart(todayKey()), lastWeek = addDays(thisWeek, -7);
+  body.innerHTML = `
+    <div class="panel">
+      <h3>Your week
+        <span class="seg week-pick" role="group" aria-label="Week">
+          <button data-week="${thisWeek}" aria-pressed="${recapWeek === thisWeek}">This week</button>
+          <button data-week="${lastWeek}" aria-pressed="${recapWeek === lastWeek}">Last week</button>
+        </span>
+      </h3>
+      <div class="crisis" id="recap-crisis" hidden>${SUPPORT_HTML}</div>
+      <div class="ai-text" id="recap-text"></div>
+      <div class="ai-meta" id="recap-meta"></div>
+      <div id="recap-progress"></div>
+      <div><button class="btn small primary" id="recap-go"></button></div>
+    </div>
+    <div class="panel">
+      <h3>Ask your journal</h3>
+      <form class="ask-form" id="ask-form">
+        <input id="ask-input" type="text" placeholder="Ask about your entries…" autocomplete="off" maxlength="300" aria-label="Question about your journal" />
+        <button class="btn primary" type="submit" id="ask-go">Ask</button>
+      </form>
+      <div class="examples">${EXAMPLES.map((q) => `<button type="button" data-q="${escapeHtml(q)}">${escapeHtml(q)}</button>`).join("")}</div>
+      <div class="crisis" id="ask-crisis" hidden>${SUPPORT_HTML}</div>
+      <div id="ask-progress"></div>
+      <div class="ai-text" id="ask-answer"></div>
+      <div class="sources" id="ask-sources"></div>
+    </div>
+    <p class="ai-meta">The AI runs entirely on this device and only sees your entries here — nothing is sent anywhere. It can misread things or get them wrong, and it can't diagnose anything. For that, talk to a doctor or therapist.</p>`;
+  fillRecap();
+}
+
+function setupHtml(dev) {
+  if (!dev.supported) {
+    return `<div class="panel"><h3>On-device AI isn't available here</h3><p>${escapeHtml(dev.reason)}</p>
+      <p>Everything else in Undercurrent works without it.</p></div>`;
+  }
+  return `<div class="panel">
+    <h3>Turn on on-device AI</h3>
+    <p>Undercurrent can use a small AI model that runs <b>entirely on this device</b>. It can write a gentle recap of your week, suggest a check-in from what you wrote, and answer questions about your entries. Your writing is never sent anywhere.</p>
+    <p>The first time, your browser downloads the model once (from Hugging Face). After that it works offline. Bigger models write better but need a stronger device.</p>
+    <div class="models" role="radiogroup" aria-label="Model">${aiMod.MODELS.map((m) => `
+      <label><input type="radio" name="ai-model" value="${m.id}" ${m.id === dev.recommended ? "checked" : ""} />
+        ${m.label} · ${m.id} · about ${m.gb} GB${m.id === dev.recommended ? `<span class="rec">Suggested for this device</span>` : ""}</label>`).join("")}
+    </div>
+    <div id="setup-progress"></div>
+    <div><button class="btn primary" id="ai-setup-go">Download and turn on</button></div>
+  </div>`;
+}
+
+$("reflect-body").addEventListener("click", async (e) => {
+  if (e.target.id === "ai-setup-go") return setupAI();
+  if (e.target.dataset.week) {
+    recapWeek = e.target.dataset.week;
+    e.target.parentElement.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === e.target)));
+    return fillRecap();
+  }
+  if (e.target.id === "recap-go") return writeRecap();
+  if (e.target.dataset.q) { $("ask-input").value = e.target.dataset.q; return askJournal(e.target.dataset.q); }
+  if (e.target.dataset.open) openDay(e.target.dataset.open);
+});
+$("reflect-body").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = $("ask-input").value.trim();
+  if (q) askJournal(q);
+});
+
+async function setupAI() {
+  const dev = await aiDetect();
+  const model = document.querySelector('input[name="ai-model"]:checked')?.value || dev.recommended;
+  const btn = $("ai-setup-go");
+  btn.disabled = true;
+  btn.textContent = "Downloading…";
+  saveAiSettings({ model, f16: dev.f16 });
+  try {
+    await ensureAI(progressUi($("setup-progress")));
+    toast("On-device AI is ready.");
+    updateAiSuggest();
+    renderReflect();
+  } catch (err) {
+    console.error(err);
+    saveAiSettings(null);
+    (await aiModule()).unload();
+    $("setup-progress").innerHTML = `<p class="progress-text">Couldn't start this model: ${escapeHtml((await aiModule()).friendlyError(err))}</p>`;
+    btn.disabled = false;
+    btn.textContent = "Try again";
+  }
+}
+
+function weekKeys(start) { return rangeKeys(7, addDays(start, 6)).filter((k) => k <= todayKey()); }
+
+async function fillRecap() {
+  const keys = weekKeys(recapWeek).filter((k) => entries.has(k));
+  const saved = await recapStore.get(recapWeek);
+  const btn = $("recap-go");
+  if (!btn) return;
+  $("recap-crisis").hidden = !keys.some((k) => crisisLanguage(entries.get(k).text));
+  $("recap-text").textContent = saved?.text || "";
+  if (!keys.length) {
+    $("recap-meta").textContent = `No entries ${recapWeek === weekStart(todayKey()) ? "this week yet" : "that week"}.`;
+    btn.hidden = true;
+    return;
+  }
+  btn.hidden = false;
+  btn.textContent = saved ? "Rewrite" : "Write my recap";
+  const newer = saved && keys.some((k) => entries.get(k).updatedAt > saved.generatedAt);
+  $("recap-meta").textContent = saved
+    ? `Written ${shortDate(dayKey(new Date(saved.generatedAt)))} from ${saved.count} ${saved.count === 1 ? "day" : "days"}.${newer ? " You've written more since — rewrite to include it." : ""}`
+    : `${keys.length} ${keys.length === 1 ? "day" : "days"} to look back on.`;
+}
+
+async function writeRecap() {
+  const week = recapWeek;
+  const keys = weekKeys(week).filter((k) => entries.has(k));
+  if (!keys.length) return;
+  const btn = $("recap-go");
+  btn.disabled = true;
+  $("recap-text").textContent = "";
+  try {
+    const ai = await ensureAI(progressUi($("recap-progress")));
+    $("recap-progress").innerHTML = "";
+    const per = Math.floor(9000 / keys.length); // keep the whole week inside the model's context
+    const prompt = `Here are my journal entries and check-ins for the week of ${shortDate(week)}:\n\n${keys.map((k) => entryForModel(k, per)).join("\n\n")}\n\n` +
+      `Write a short, gentle recap of my week in 3 to 5 sentences: what was hard, what helped, and one pattern worth noticing. Speak to me as "you". Only use what's written above.`;
+    let text = await ai.chat([{ role: "system", content: ai.SYSTEM }, { role: "user", content: prompt }],
+      { maxTokens: 320, onToken: (t) => { if (recapWeek === week) $("recap-text").textContent = t; } });
+    text = ai.guardReply(text);
+    await recapStore.put({ week, text, generatedAt: Date.now(), count: keys.length, model: aiSettings()?.model });
+    if (recapWeek === week) fillRecap();
+  } catch (err) {
+    console.error(err);
+    $("recap-progress").innerHTML = `<p class="progress-text">The AI couldn't write a recap: ${escapeHtml((await aiModule()).friendlyError(err))}</p>`;
+    (await aiModule()).unload();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ask your journal: find the most relevant entries with the search model, then answer from them */
+const hashText = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return (h >>> 0).toString(36); };
+const QUERY_PREFIX = "Represent this sentence for searching relevant passages: "; // what the search model expects for questions
+
+async function buildIndex(ai, onProgress) {
+  const stored = new Map((await vectorStore.all()).map((v) => [v.date, v]));
+  for (const date of stored.keys()) if (!entries.has(date)) await vectorStore.remove(date);
+  const todo = [];
+  for (const [date, e] of entries) {
+    const doc = entryForModel(date, 1800);
+    const hash = hashText(doc);
+    if (stored.get(date)?.hash !== hash) todo.push({ date, doc, hash });
+  }
+  for (let i = 0; i < todo.length; i += 8) {
+    onProgress(i / todo.length, `Reading your journal… ${i} of ${todo.length} days`);
+    const batch = todo.slice(i, i + 8);
+    const vectors = await ai.embed(batch.map((t) => t.doc));
+    for (let j = 0; j < batch.length; j++) {
+      const v = { date: batch[j].date, hash: batch[j].hash, vector: vectors[j] };
+      await vectorStore.put(v);
+      stored.set(v.date, v);
+    }
+  }
+  return [...stored.values()].filter((v) => entries.has(v.date));
+}
+
+let asking = false;
+async function askJournal(question) {
+  if (asking) return;
+  asking = true;
+  $("ask-go").disabled = true;
+  $("ask-answer").textContent = "";
+  $("ask-sources").innerHTML = "";
+  $("ask-crisis").hidden = !crisisLanguage(question);
+  try {
+    if (!entries.size) { $("ask-answer").textContent = "There aren't any entries to look through yet."; return; }
+    const progress = progressUi($("ask-progress"));
+    const ai = await ensureAI(progress);
+    const index = await buildIndex(ai, progress);
+    progress(1, "Looking for relevant days…");
+    const [qv] = await ai.embed([QUERY_PREFIX + question]);
+    const today = todayKey();
+    const ranked = index
+      .map((v) => ({ date: v.date, score: ai.cosine(qv, v.vector) + Math.max(0, 14 - daysBetween(v.date, today)) * 0.004 })) // slight lean toward recent days
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map((r) => r.date)
+      .sort();
+    $("ask-progress").innerHTML = "";
+    if (!ranked.length) { $("ask-answer").textContent = "There aren't any entries to look through yet."; return; }
+    if (ranked.some((k) => crisisLanguage(entries.get(k).text))) $("ask-crisis").hidden = false;
+    const prompt = `Here are the entries from my journal that seem most relevant (oldest first):\n\n${ranked.map((k) => entryForModel(k, 1100)).join("\n\n")}\n\n` +
+      `Question: ${question}\n\nAnswer in 2 to 5 sentences, using only these entries. Mention the dates you draw on (like "Oct 6"). If they don't answer the question, say so.`;
+    let text = await ai.chat([{ role: "system", content: ai.SYSTEM }, { role: "user", content: prompt }],
+      { maxTokens: 260, onToken: (t) => { $("ask-answer").textContent = t; } });
+    text = ai.guardReply(text);
+    $("ask-answer").textContent = text;
+    $("ask-sources").innerHTML = `Looked at: ${ranked.map((k) => `<button type="button" data-open="${k}">${escapeHtml(shortDate(k))}</button>`).join("")}`;
+  } catch (err) {
+    console.error(err);
+    $("ask-progress").innerHTML = `<p class="progress-text">The AI couldn't answer: ${escapeHtml((await aiModule()).friendlyError(err))}</p>`;
+    (await aiModule()).unload();
+  } finally {
+    asking = false;
+    $("ask-go").disabled = false;
+  }
+}
+
+/* settings row */
+function renderAiSetting() {
+  const cfg = aiSettings();
+  $("ai-setting-detail").textContent = cfg
+    ? `On · ${cfg.model}, running on this device.`
+    : "Off. A small model that runs on this device — nothing leaves it.";
+  $("ai-setting-btn").textContent = cfg ? "Turn off" : "Set up";
+}
+$("ai-setting-btn").addEventListener("click", async () => {
+  if (!aiSettings()) { $("settings").close(); showView("reflect"); return; }
+  if (!confirm("Turn off on-device AI? This removes the downloaded model from this browser. Your entries and saved recaps stay.")) return;
+  const ai = await aiModule();
+  await ai.deleteDownloads();
+  await vectorStore.clear();
+  saveAiSettings(null);
+  hideSuggestion();
+  updateAiSuggest();
+  renderAiSetting();
+  if (view === "reflect") renderReflect();
+  toast("On-device AI is off and the model was removed.");
+});
+$("open-reflect").addEventListener("click", async () => {
+  if (dirty) await saveNow();
+  showView(view === "reflect" ? "journal" : "reflect");
+  if (matchMedia("(max-width: 780px)").matches) toggleList(false);
+});
+
 /* ---------- your data ---------- */
 async function openSettings() {
   if (dirty) await saveNow();
@@ -1553,6 +1998,7 @@ async function openSettings() {
   $("persist-detail").textContent = persisted
     ? "The browser won't clear your entries to free up space."
     : "The browser may clear site data when space runs low. Installing the app usually turns this on.";
+  renderAiSetting();
   $("settings").showModal();
 }
 
@@ -1605,7 +2051,7 @@ async function importData(file) {
 }
 
 /* ---------- events ---------- */
-textEl.addEventListener("input", () => { scheduleSave(); renderPrompt(); updateFooter(); autosize(); });
+textEl.addEventListener("input", () => { scheduleSave(); renderPrompt(); updateFooter(); autosize(); updateCareNote(); updateAiSuggest(); });
 $("prev-day").addEventListener("click", () => openDay(addDays(current, -1)));
 $("next-day").addEventListener("click", () => openDay(addDays(current, 1)));
 $("go-today").addEventListener("click", () => openDay(todayKey(), { focus: true }));

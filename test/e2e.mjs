@@ -181,12 +181,12 @@ phone.on("pageerror", (e) => errors.push(e.message));
 await phone.goto(url);
 await test("phone layout has no sideways scroll and a working entry list", async () => {
   await phone.waitForTimeout(800);
-  const overflow = await phone.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = await phone.evaluate(() => document.documentElement.scrollWidth - 390);
   assert(overflow <= 0, `overflows by ${overflow}px`);
   // body hides horizontal overflow, so also check nothing is drawn off-screen
   const offscreen = await phone.evaluate(() =>
-    [...document.querySelectorAll("header *, .editor *, footer *")]
-      .filter((el) => el.getClientRects().length && el.getBoundingClientRect().right > window.innerWidth + 0.5)
+    [...document.querySelectorAll("header *, .editor, .editor *, footer *")]
+      .filter((el) => el.getClientRects().length && el.getBoundingClientRect().right > 390.5)
       .map((el) => el.id || el.className || el.tagName));
   assert(!offscreen.length, "off-screen: " + offscreen.join(", "));
   assert(!(await phone.isVisible("#timeline")), "list hidden by default");
@@ -424,8 +424,8 @@ await phone2.setInputFiles("#import-file", sampleFile);
 await phone2.waitForFunction(() => document.querySelector("#stats").textContent.includes("entries"));
 await test("check-in and trends fit on a phone", async () => {
   const off = () => phone2.evaluate(() =>
-    [...document.querySelectorAll("header *, .editor *, .trends *")]
-      .filter((el) => el.getClientRects().length && !el.closest(".scroll, .tooltip") && el.getBoundingClientRect().right > window.innerWidth + 0.5)
+    [...document.querySelectorAll("header *, .editor, .editor *, .trends, .trends *")]
+      .filter((el) => el.getClientRects().length && !el.closest(".scroll, .tooltip") && el.getBoundingClientRect().right > 390.5)
       .map((el) => el.id || el.className?.baseVal || el.className || el.tagName));
   let bad = await off();
   assert(!bad.length, "journal off-screen: " + bad.join(", "));
@@ -558,10 +558,183 @@ await phone3.goto(url);
 await test("the questionnaire fits on a phone", async () => {
   await phone3.click("#banner-start");
   const bad = await phone3.evaluate(() => [...document.querySelectorAll("#screening *")]
-    .filter((el) => el.getClientRects().length && el.getBoundingClientRect().right > window.innerWidth + 0.5).map((el) => el.className || el.tagName));
+    .filter((el) => el.getClientRects().length && el.getBoundingClientRect().right > 390.5).map((el) => el.className || el.tagName));
   assert(!bad.length, "off-screen: " + bad.join(", "));
 });
 await phone3.screenshot({ path: join(shots, "phq9-phone.png") });
+
+/* ---------- step 3b: on-device AI (with a fake engine; the real models are compared in eval-models.mjs) ---------- */
+console.log("On-device AI");
+const ctx4 = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+// A stand-in engine: answers by task, records every prompt, and embeds by keyword.
+await ctx4.addInitScript(() => {
+  const words = ["sleep", "walk", "dana", "review", "sister", "anxious", "tired"];
+  window.__prompts = [];
+  window.__undercurrentFakeAI = {
+    __fake: true,
+    async chat(messages, { onToken } = {}) {
+      const prompt = messages[messages.length - 1].content;
+      window.__prompts.push(prompt);
+      let out;
+      if (prompt.includes("suggest a check-in")) out = '```json\n{"mood": 2, "anxiety": 3, "factors": ["Sleep", "family", "Unicorns"], "why": "You mention a bad night and snapping at your sister."}\n```';
+      else if (prompt.includes("recap of my week")) out = "<think>hidden</think>This week had some hard nights, and walks seemed to help.";
+      else if (prompt.includes("Question: do I have depression")) out = "Based on these entries, you likely have depression.";
+      else out = "Walks with Dana on Oct 6 seemed to help.";
+      for (let i = 1; i <= 3; i++) onToken?.(out.slice(0, Math.ceil((out.length * i) / 3)));
+      return out;
+    },
+    async embed(texts) {
+      return texts.map((t) => words.map((w) => (t.toLowerCase().includes(w) ? 1 : 0)).concat(0.01));
+    },
+  };
+});
+const p4 = await ctx4.newPage();
+p4.on("pageerror", (e) => errors.push(e.message));
+await p4.goto(url);
+const saved4 = () => p4.waitForFunction(() => document.querySelector("#status").textContent.startsWith("Saved"));
+
+await test("crisis language in an entry shows support, even without AI", async () => {
+  await p4.fill("#text", "Long day.");
+  assert(await p4.isHidden("#care-note"), "not for ordinary writing");
+  await p4.fill("#text", "Long day. Honestly I don't want to be here anymore.");
+  assert(await p4.isVisible("#care-note"), "shown for crisis language");
+  await p4.fill("#text", "");
+  await p4.waitForFunction(() => document.querySelector("#status").textContent === "Not written yet");
+});
+
+await test("AI stays off until set up, and the setup suggests a model", async () => {
+  await p4.fill("#text", "Bad night. Woke at 3am heart racing about the review. Snapped at my sister on the phone, felt guilty after.");
+  await saved4();
+  assert(await p4.isHidden("#ai-suggest-row"), "no AI button before setup");
+  await p4.click("#open-reflect");
+  await p4.waitForSelector("#ai-setup-go");
+  assert((await p4.$$('input[name="ai-model"]')).length === 3, "three model choices");
+  assert(await p4.isChecked('input[value="Qwen3.5-2B"]'), "suggested model preselected");
+  assert((await p4.textContent("#reflect-body")).includes("entirely on this device"), "privacy explained");
+});
+
+await test("turning AI on shows the week and the ask box", async () => {
+  await p4.click("#ai-setup-go");
+  await p4.waitForSelector("#recap-go");
+  assert((await p4.textContent("#ai-model")).includes("Qwen3.5-2B"), "model named");
+});
+
+await test("the weekly recap streams, hides model 'thinking', and is saved", async () => {
+  await p4.click("#recap-go");
+  await p4.waitForFunction(() => document.querySelector("#recap-meta").textContent.startsWith("Written"));
+  const text = await p4.textContent("#recap-text");
+  assert(text === "This week had some hard nights, and walks seemed to help.", text);
+  const prompt = await p4.evaluate(() => window.__prompts.at(-1));
+  assert(prompt.includes("Snapped at my sister"), "entry in prompt");
+  await p4.reload();
+  await p4.click("#open-reflect");
+  await p4.waitForFunction(() => document.querySelector("#recap-text")?.textContent.includes("walks seemed to help"));
+  assert((await p4.textContent("#recap-go")) === "Rewrite", "offers a rewrite");
+});
+
+await test("suggest a check-in: only real factors, and only applied when accepted", async () => {
+  await p4.click("#open-reflect"); // back to the journal
+  assert(await p4.isVisible("#ai-suggest-row"), "button shows once there's enough writing");
+  await p4.click("#ai-suggest");
+  await p4.waitForSelector("#suggestion:not([hidden])");
+  const sg = await p4.textContent("#suggestion");
+  assert(sg.includes("Mood 2 · Low") && sg.includes("Anxiety 3 · High") && sg.includes("Sleep, Family") && !sg.includes("Unicorns"), sg);
+  assert((await p4.getAttribute('.scale[data-field="mood"] button[data-value="2"]', "aria-checked")) === "false", "not applied yet");
+  await p4.click("#sg-use");
+  assert((await p4.getAttribute('.scale[data-field="mood"] button[data-value="2"]', "aria-checked")) === "true", "applied");
+  assert((await p4.getAttribute('#factors button[data-factor="Family"]', "aria-pressed")) === "true", "factor applied");
+  await saved4();
+});
+
+await test("ask your journal answers from the most relevant days and lists them", async () => {
+  const sample = [
+    ["2026-01-05", "Slept terribly, tired all day."], ["2026-01-06", "Walk with Dana by the river, felt lighter."],
+    ["2026-01-07", "Review prep, anxious."], ["2026-01-08", "Cooked dinner, quiet evening."],
+  ].map(([date, text]) => ({ date, text, createdAt: 1, updatedAt: 1 }));
+  const file = join(shots, "ask.json");
+  await writeFile(file, JSON.stringify({ app: "undercurrent", version: 3, entries: sample }));
+  await p4.setInputFiles("#import-file", file);
+  await p4.waitForFunction(() => document.querySelector("#toast").textContent.includes("Restored"));
+  await p4.click("#open-reflect");
+  await p4.fill("#ask-input", "When did a walk help?");
+  await p4.click("#ask-go");
+  await p4.waitForFunction(() => document.querySelector("#ask-sources").textContent.includes("Looked at"));
+  assert((await p4.textContent("#ask-answer")).includes("Walks with Dana"), "answer shown");
+  const prompt = await p4.evaluate(() => window.__prompts.at(-1));
+  assert(prompt.includes("Walk with Dana by the river"), "relevant entry sent to the model");
+  const sources = await p4.$$eval("#ask-sources button", (els) => els.map((e) => e.dataset.open));
+  assert(sources.includes("2026-01-06"), "sources: " + sources);
+  assert(await p4.isHidden("#ask-crisis"), "no crisis card for an ordinary question");
+});
+
+await test("a diagnosis in the AI's reply is replaced, never shown", async () => {
+  await p4.fill("#ask-input", "do I have depression");
+  await p4.click("#ask-go");
+  await p4.waitForFunction(() => document.querySelector("#ask-answer").textContent.includes("only a doctor or therapist"));
+  assert(!(await p4.textContent("#ask-answer")).includes("likely have depression"), "diagnosis removed");
+});
+
+await test("crisis language in a question shows support alongside the answer", async () => {
+  await p4.fill("#ask-input", "why do I feel like I want to die");
+  await p4.click("#ask-go");
+  assert(await p4.isVisible("#ask-crisis"), "support shown");
+  assert((await p4.textContent("#ask-crisis")).includes("988"), "988 listed");
+  await p4.waitForFunction(() => document.querySelector("#ask-sources").textContent.includes("Looked at"));
+});
+
+await test("source dates open that day", async () => {
+  await p4.fill("#ask-input", "When did a walk help?");
+  await p4.click("#ask-go");
+  await p4.waitForFunction(() => document.querySelector("#ask-sources").textContent.includes("Looked at"));
+  await p4.click('#ask-sources button[data-open="2026-01-06"]');
+  assert(await p4.isVisible(".editor"), "journal shown");
+  assert((await p4.inputValue("#text")).includes("Walk with Dana") || (await p4.textContent("#reader")).includes("Walk with Dana"), "that day opened");
+});
+await p4.click("#open-reflect");
+await p4.screenshot({ path: join(shots, "reflect.png"), fullPage: true });
+
+await test("turning AI off removes it and its search data", async () => {
+  await p4.click("#open-settings");
+  await p4.waitForFunction(() => document.querySelector("#ai-setting-detail").textContent.startsWith("On"));
+  p4.once("dialog", (d) => d.accept());
+  await p4.click("#ai-setting-btn");
+  await p4.waitForFunction(() => document.querySelector("#ai-setting-detail").textContent.startsWith("Off"));
+  await p4.click("#close-settings");
+  const vectors = await p4.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open("undercurrent");
+    req.onsuccess = () => { const all = req.result.transaction("vectors").objectStore("vectors").getAll(); all.onsuccess = () => resolve(all.result.length); };
+  }));
+  assert(vectors === 0, `${vectors} vectors left`);
+  await p4.click("#go-today");
+  assert(await p4.isHidden("#ai-suggest-row"), "suggest button gone");
+});
+
+const noGpu = await (await browser.newContext()).newPage();
+await noGpu.addInitScript(() => { Object.defineProperty(Navigator.prototype, "gpu", { get: () => undefined, configurable: true }); delete Navigator.prototype.gpu; });
+await noGpu.goto(url);
+await test("devices without WebGPU get a clear explanation", async () => {
+  await noGpu.click("#open-reflect");
+  await noGpu.waitForFunction(() => document.querySelector("#reflect-body").textContent.includes("isn't available"));
+  assert((await noGpu.textContent("#reflect-body")).includes("works without it"), "reassures");
+});
+
+const phone4ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+await phone4ctx.addInitScript(() => { window.__undercurrentFakeAI = { __fake: true, chat: async () => "Okay.", embed: async (t) => t.map(() => [1, 0]) }; });
+const phone4 = await phone4ctx.newPage();
+await phone4.goto(url);
+await test("Reflect fits on a phone", async () => {
+  await phone4.click("#open-reflect");
+  await phone4.click("#ai-setup-go");
+  await phone4.waitForSelector("#ask-input");
+  const bad = await phone4.evaluate(() => [...document.querySelectorAll("header *, .reflect, .reflect *")]
+    .filter((el) => el.getClientRects().length && el.getBoundingClientRect().right > 390.5).map((el) => el.id || el.className || el.tagName));
+  assert(!bad.length, "off-screen: " + bad.join(", "));
+});
+await phone4.screenshot({ path: join(shots, "reflect-phone.png"), fullPage: true });
+
+await test("no page errors (AI)", async () => {
+  assert(!errors.length, errors.join("; "));
+});
 
 await browser.close();
 server.close();

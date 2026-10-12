@@ -22,10 +22,12 @@ const context = await chromium.launchPersistentContext(join(homedir(), ".cache",
   headless: true,
   args: ["--enable-unsafe-webgpu", "--enable-features=Vulkan,WebGPU", "--ignore-gpu-blocklist", "--use-angle=vulkan"],
 });
+// EVAL_QUERY adds tuning, e.g. EVAL_QUERY="chunk=64&ctx=2048"
+const extra = process.env.EVAL_QUERY ? "&" + process.env.EVAL_QUERY : "";
 for (const model of process.argv.slice(2)) {
   const page = await context.newPage();
   page.on("console", (m) => { if (m.type() === "error") process.stderr.write(`[console] ${m.text()}\n`); });
-  await page.goto(`http://127.0.0.1:${server.address().port}/test/eval.html?model=${encodeURIComponent(model)}`);
+  await page.goto(`http://127.0.0.1:${server.address().port}/test/eval.html?model=${encodeURIComponent(model)}${extra}`);
   let last = "";
   for (;;) {
     const r = await page.evaluate(() => window.__evalResult).catch(() => null);

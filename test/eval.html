@@ -79,9 +79,15 @@ Entry: "${ENTRIES[2][1]}"` },
 window.__evalResult = { model, status: "starting" };
 try {
   const t0 = performance.now();
+  // Optional tuning for weak GPUs: smaller prefill chunks keep each GPU job short
+  // (some drivers reset jobs that run too long), a smaller context saves memory.
+  const chatOpts = {};
+  if (params.get("chunk")) chatOpts.prefill_chunk_size = Number(params.get("chunk"));
+  if (params.get("ctx")) chatOpts.context_window_size = Number(params.get("ctx"));
+  window.__evalResult.chatOpts = chatOpts;
   const engine = await webllm.CreateMLCEngine(model, {
     initProgressCallback: (p) => { window.__evalResult.progress = p.text; },
-  });
+  }, chatOpts);
   const loadSeconds = (performance.now() - t0) / 1000;
   log(`${model} loaded in ${loadSeconds.toFixed(0)}s`);
   const results = [];
@@ -98,7 +104,7 @@ try {
     results.push({ task: t.name, seconds: +secs.toFixed(1), prefill_tps: usage.extra?.prefill_tokens_per_s, decode_tps: usage.extra?.decode_tokens_per_s, completion_tokens: usage.completion_tokens, out });
     log(`--- ${t.name} (${secs.toFixed(1)}s)\n${out}`);
   }
-  window.__evalResult = { model, status: "done", loadSeconds: +loadSeconds.toFixed(0), results };
+  window.__evalResult = { model, chatOpts, status: "done", loadSeconds: +loadSeconds.toFixed(0), results };
 } catch (err) {
   window.__evalResult = { model, status: "error", error: String(err?.message || err) };
   log("ERROR " + err);

@@ -1,12 +1,14 @@
 /* Undercurrent service worker: offline app shell.
    Network-first for navigations (so updates arrive), stale-while-revalidate for the
-   shell and fonts. Journal entries live in IndexedDB and never pass through here. */
-const CACHE = "undercurrent-v1";
+   shell, fonts and the AI library. Journal entries live in IndexedDB and never pass through here. */
+const CACHE = "undercurrent-v2";
 const SHELL = [
-  "./", "./index.html", "./manifest.json",
+  "./", "./index.html", "./ai.js", "./manifest.json",
   "./icon-32.png", "./icon-180.png", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png"
 ];
-const RUNTIME_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com"];
+// Fonts, plus the WebLLM library (esm.run redirects to jsDelivr). Model weights are
+// cached by WebLLM itself, so they aren't handled here.
+const RUNTIME_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com", "esm.run", "cdn.jsdelivr.net"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
