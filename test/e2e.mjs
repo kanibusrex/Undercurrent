@@ -858,6 +858,216 @@ await test("the safety plan fits on a phone", async () => {
 });
 await phone5.screenshot({ path: join(shots, "plan-phone.png") });
 
+/* ---------- step 4b: passphrase lock (encryption at rest) ---------- */
+console.log("Passphrase lock");
+const ctx6 = await browser.newContext({ timezoneId: "America/Chicago", viewport: { width: 1280, height: 900 } });
+const p6 = await ctx6.newPage();
+p6.on("pageerror", (e) => errors.push(e.message));
+await p6.goto(url);
+const SECRET = "plum-orchard-secret";
+const PASS = "river lantern seven toast";
+// Everything IndexedDB holds, as text — what someone with access to the browser's files could read.
+const rawDump = (pg) => pg.evaluate(() => new Promise((resolve) => {
+  const req = indexedDB.open("undercurrent");
+  req.onsuccess = () => {
+    const d = req.result, names = [...d.objectStoreNames], out = {};
+    const t = d.transaction(names);
+    for (const n of names) t.objectStore(n).getAll().onsuccess = (e) => { out[n] = e.target.result; };
+    t.oncomplete = () => { d.close(); resolve(JSON.stringify(out, (k, v) => (v instanceof ArrayBuffer || ArrayBuffer.isView(v) ? "[bytes]" : v))); };
+  };
+}));
+const unlock = async (pg, pass) => { await pg.fill("#lock-pass", pass); await pg.click("#lock-go"); };
+
+await test("setup: an entry, a check-in, a questionnaire result and a plan", async () => {
+  await p6.fill("#text", `Today I wrote about the ${SECRET}.`);
+  await p6.click('.scale[data-field="mood"] button[data-value="4"]');
+  await p6.waitForFunction(() => document.querySelector("#status").textContent.startsWith("Saved"));
+  await p6.click("#banner-start");
+  for (let i = 0; i < 9; i++) await p6.click(`#sc-inner li[data-i="${i}"] .sc-opts button[data-v="1"]`);
+  await p6.click("#sc-submit");
+  await p6.waitForSelector("#sc-inner .result");
+  await p6.click("#sc-done");
+  await p6.click('#footer-help a[data-open-plan]');
+  await p6.fill('#plan textarea[data-list="coping"]', "Call Dana");
+  await p6.click("#plan-save");
+  await p6.click("#plan-close");
+  assert((await rawDump(p6)).includes(SECRET), "readable before the lock");
+});
+
+await test("turning the lock on checks the passphrase and the warning", async () => {
+  await p6.click("#open-settings"); await p6.waitForSelector("#settings[open]");
+  await p6.click("#lock-setting-btn");
+  await p6.fill("#pass-new", "short");
+  await p6.fill("#pass-confirm", "short");
+  await p6.click("#pass-go");
+  assert((await p6.textContent("#pass-error")).includes("8 characters"), "too short");
+  await p6.fill("#pass-new", PASS);
+  await p6.fill("#pass-confirm", PASS + "x");
+  await p6.click("#pass-go");
+  assert((await p6.textContent("#pass-error")).includes("don't match"), "mismatch");
+  await p6.fill("#pass-confirm", PASS);
+  await p6.click("#pass-go");
+  assert((await p6.textContent("#pass-error")).includes("can't be recovered"), "warning must be acknowledged");
+  await p6.check("#pass-ack");
+  await p6.click("#pass-go");
+  await p6.waitForFunction(() => !document.querySelector("#pass-dialog").open, null, { timeout: 60000 });
+  assert((await p6.textContent("#lock-setting-detail")).startsWith("On"), "shows on");
+  await p6.click("#close-settings");
+});
+
+await test("at rest, nothing readable is left — only encrypted records", async () => {
+  const dump = await rawDump(p6);
+  assert(!dump.includes(SECRET), "entry text not stored in the clear");
+  assert(!dump.includes(PASS), "passphrase never stored");
+  const parsed = JSON.parse(dump);
+  assert(parsed.entries.every((e) => e.sealed && !("text" in e) && !("mood" in e)), "entries sealed");
+  assert(parsed.screenings.every((r) => r.sealed && !("answers" in r)), "questionnaires sealed");
+  assert(parsed.meta.find((m) => m.key === "safetyPlan" && !m.sealed), "safety plan readable for the lock screen (default)");
+});
+
+await test("the app keeps working while unlocked", async () => {
+  await p6.fill("#text", `Today I wrote about the ${SECRET}. And more.`);
+  await p6.waitForFunction(() => document.querySelector("#status").textContent.startsWith("Saved"));
+  assert(!(await rawDump(p6)).includes("And more"), "new writing is encrypted too");
+});
+
+await test("after a reload it's locked, and nothing from the journal is on the page", async () => {
+  await p6.reload();
+  await p6.waitForSelector("#lockscreen", { state: "visible" });
+  assert(await p6.isHidden(".wrap"), "journal hidden");
+  assert(!(await p6.content()).includes(SECRET), "entry not in the page");
+  assert((await p6.textContent("#lock-help")).includes("988"), "helpline on the lock screen");
+});
+
+await test("the safety plan can be read from the lock screen, but not edited", async () => {
+  await p6.click("#lock-plan");
+  assert((await p6.textContent("#plan-inner")).includes("Call Dana"), "plan shown");
+  assert(!(await p6.$("#plan-edit")), "no editing while locked");
+  await p6.click("#plan-close");
+});
+
+await test("a wrong passphrase is refused; the right one opens the journal", async () => {
+  await unlock(p6, "wrong passphrase here");
+  await p6.waitForFunction(() => document.querySelector("#lock-error").textContent.includes("didn't work"), null, { timeout: 60000 });
+  await unlock(p6, PASS);
+  await p6.waitForFunction((s) => document.querySelector("#text")?.value.includes(s), SECRET, { timeout: 60000 });
+  assert(await p6.isHidden("#lockscreen"), "lock screen gone");
+  assert((await p6.getAttribute('.scale[data-field="mood"] button[data-value="4"]', "aria-checked")) === "true", "check-in decrypted");
+  await p6.click("#open-trends");
+  assert((await p6.textContent(".q-section")).includes("PHQ-9"), "questionnaire decrypted");
+  await p6.click("#go-today");
+});
+
+await test("hiding the plan from the lock screen encrypts it too", async () => {
+  await p6.click("#open-settings"); await p6.waitForSelector("#settings[open]");
+  await p6.uncheck("#plan-on-lock");
+  let sealed = false;
+  for (let i = 0; i < 40 && !sealed; i++) {
+    sealed = !!JSON.parse(await rawDump(p6)).meta.find((m) => m.key === "safetyPlan")?.sealed;
+    if (!sealed) await p6.waitForTimeout(250);
+  }
+  assert(sealed, "plan sealed");
+  await p6.click("#lock-now");
+  await p6.waitForSelector("#lockscreen", { state: "visible" });
+  assert(await p6.isHidden("#lock-plan"), "no plan button when it's private");
+  await unlock(p6, PASS);
+  await p6.waitForSelector("#lockscreen", { state: "hidden", timeout: 60000 });
+  await p6.click("#open-settings"); await p6.waitForSelector("#settings[open]");
+  await p6.check("#plan-on-lock");
+  await p6.click("#close-settings");
+});
+
+await test("another open tab locks when the lock is turned on elsewhere, and on 'Lock now'", async () => {
+  const other = await ctx6.newPage();
+  await other.goto(url);
+  await other.waitForSelector("#lockscreen", { state: "visible" });
+  await unlock(other, PASS);
+  await other.waitForSelector("#lockscreen", { state: "hidden", timeout: 60000 });
+  await p6.click("#open-settings"); await p6.waitForSelector("#settings[open]");
+  await p6.click("#lock-now");
+  await other.waitForSelector("#lockscreen", { state: "visible", timeout: 10000 });
+  await other.close();
+  await unlock(p6, PASS);
+  await p6.waitForSelector("#lockscreen", { state: "hidden", timeout: 60000 });
+});
+
+await test("it locks itself after the chosen idle time", async () => {
+  await p6.click("#open-settings"); await p6.waitForSelector("#settings[open]");
+  await p6.selectOption("#autolock", "5");
+  await p6.click("#close-settings");
+  await p6.evaluate(() => { lastActivity = Date.now() - 6 * 60000; checkAutoLock(); });
+  await p6.waitForSelector("#lockscreen", { state: "visible", timeout: 10000 });
+  await unlock(p6, PASS);
+  await p6.waitForSelector("#lockscreen", { state: "hidden", timeout: 60000 });
+});
+
+const PASS2 = "harbor pencil quiet moss";
+await test("changing the passphrase: the old one stops working, the new one works", async () => {
+  await p6.click("#open-settings"); await p6.waitForSelector("#settings[open]");
+  await p6.click("#lock-change");
+  await p6.fill("#pass-current", "not it at all");
+  await p6.fill("#pass-new", PASS2);
+  await p6.fill("#pass-confirm", PASS2);
+  await p6.click("#pass-go");
+  await p6.waitForFunction(() => document.querySelector("#pass-error").textContent.includes("didn't work"), null, { timeout: 60000 });
+  await p6.fill("#pass-current", PASS);
+  await p6.click("#pass-go");
+  await p6.waitForFunction(() => !document.querySelector("#pass-dialog").open, null, { timeout: 60000 });
+  await p6.click("#lock-now");
+  await p6.waitForSelector("#lockscreen", { state: "visible" });
+  await unlock(p6, PASS);
+  await p6.waitForFunction(() => document.querySelector("#lock-error").textContent.includes("didn't work"), null, { timeout: 60000 });
+  await unlock(p6, PASS2);
+  await p6.waitForFunction((s) => document.querySelector("#text")?.value.includes(s), SECRET, { timeout: 60000 });
+});
+
+await test("turning the lock off decrypts everything", async () => {
+  await p6.click("#open-settings"); await p6.waitForSelector("#settings[open]");
+  await p6.click("#lock-setting-btn");
+  await p6.fill("#pass-current", PASS2);
+  await p6.click("#pass-go");
+  await p6.waitForFunction(() => !document.querySelector("#pass-dialog").open, null, { timeout: 60000 });
+  await p6.click("#close-settings");
+  const parsed = JSON.parse(await rawDump(p6));
+  assert(!parsed.meta.some((m) => m.key === "lock"), "lock record removed");
+  assert(parsed.entries.every((e) => !e.sealed) && (await rawDump(p6)).includes(SECRET), "plain again");
+  await p6.reload();
+  await p6.waitForFunction((s) => document.querySelector("#text")?.value.includes(s), SECRET);
+  assert(await p6.isHidden("#lockscreen"), "no lock screen");
+});
+
+await test("forgot passphrase: erasing starts over with an empty journal", async () => {
+  await p6.click("#open-settings"); await p6.waitForSelector("#settings[open]");
+  await p6.click("#lock-setting-btn");
+  await p6.fill("#pass-new", PASS);
+  await p6.fill("#pass-confirm", PASS);
+  await p6.check("#pass-ack");
+  await p6.click("#pass-go");
+  await p6.waitForFunction(() => !document.querySelector("#pass-dialog").open, null, { timeout: 60000 });
+  await p6.reload();
+  await p6.click("#lock-forgot");
+  assert(await p6.isDisabled("#erase-go"), "needs the word first");
+  await p6.fill("#erase-confirm", "erase");
+  await p6.click("#erase-go");
+  await p6.waitForSelector("#lockscreen", { state: "hidden" });
+  await p6.waitForFunction(() => document.querySelector("#stats").textContent.includes("will appear here"));
+  assert(!(await rawDump(p6)).includes("sealed"), "nothing left");
+});
+
+const phone6 = await (await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })).newPage();
+await phone6.goto(url);
+await test("the lock screen fits on a phone", async () => {
+  await phone6.evaluate(() => { document.body.classList.add("locked"); document.querySelector("#lock-help").textContent = "Need someone right now? 988"; });
+  const bad = await phone6.evaluate(() => [...document.querySelectorAll(".lockscreen *")]
+    .filter((el) => el.getClientRects().length && el.getBoundingClientRect().right > 390.5).map((el) => el.className || el.tagName));
+  assert(!bad.length, "off-screen: " + bad.join(", "));
+});
+await phone6.screenshot({ path: join(shots, "lock-phone.png") });
+
+await test("no page errors (lock)", async () => {
+  assert(!errors.length, errors.join("; "));
+});
+
 await browser.close();
 server.close();
 console.log(failures ? `\n${failures} failed` : "\nAll passed");

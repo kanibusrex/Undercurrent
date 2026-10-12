@@ -400,6 +400,34 @@
     .contact-row { margin-left: 0; grid-template-columns: 1fr; }
   }
 
+
+  /* lock */
+  .lockscreen { display: none; }
+  body.locked .lockscreen { display: grid; position: fixed; inset: 0; z-index: 5; place-items: center; padding: 1rem; overflow-y: auto; }
+  body.locked .wrap { display: none; }
+  .lock-card { width: min(380px, 100%); display: flex; flex-direction: column; align-items: center; gap: 0.8rem; text-align: center; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 24px; padding: 2rem 1.5rem; backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); box-shadow: var(--shadow); }
+  .lock-card img { width: 56px; height: 56px; border-radius: 14px; }
+  .lock-card h1 { font-family: var(--serif); font-weight: 500; font-size: 1.5rem; }
+  .lock-card p { font-size: 0.88rem; color: var(--text-dim); }
+  .lock-card input, .field input { width: 100%; background: var(--field); border: 1px solid var(--glass-border); border-radius: 12px; color: var(--text); font: inherit; font-size: 1rem; padding: 0.7rem 0.9rem; }
+  .lock-card .btn.primary { width: 100%; }
+  .lock-error { min-height: 1.1em; font-size: 0.82rem; color: var(--danger); }
+  .lock-forgot { font-size: 0.8rem; color: var(--text-faint); }
+  .lock-help { font-size: 0.84rem; color: var(--text-dim); line-height: 1.5; padding-top: 0.6rem; border-top: 1px solid var(--glass-border); width: 100%; }
+  .lock-help a { color: var(--text); font-weight: 600; }
+  #lock-plan[hidden] { display: none; }
+  .field { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.82rem; color: var(--text-dim); margin-top: 0.8rem; }
+  .field[hidden], .check[hidden] { display: none; }
+  .check { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.84rem; color: var(--text-dim); line-height: 1.45; margin-top: 0.8rem; }
+  .check input { margin-top: 0.2rem; accent-color: var(--accent); }
+  .check small { display: block; color: var(--text-faint); }
+  .warn-box { background: rgba(252, 211, 77, 0.08); border: 1px solid rgba(252, 211, 77, 0.3); border-radius: 12px; padding: 0.7rem 0.8rem; color: var(--text); }
+  .lock-options { padding: 0 0 0.8rem; display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.84rem; color: var(--text-dim); }
+  .lock-options[hidden] { display: none; }
+  .lock-options select { background: var(--field); color: var(--text); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.25rem 0.4rem; font: inherit; margin-left: 0.4rem; }
+  .lock-actions { display: flex; gap: 0.5rem; margin-top: 0.7rem; }
+  dialog p + p { margin-top: 0.6rem; }
+
   @media (max-width: 780px) {
     .layout { grid-template-columns: 1fr; }
     #toggle-list { display: inline-flex; }
@@ -422,6 +450,20 @@
 </style>
 </head>
 <body>
+<div class="lockscreen" id="lockscreen">
+  <form class="lock-card" id="lock-form" autocomplete="off">
+    <img src="icon-192.png" alt="" />
+    <h1>Undercurrent is locked</h1>
+    <p>Enter your passphrase to open your journal.</p>
+    <input type="password" id="lock-pass" aria-label="Passphrase" placeholder="Passphrase" autocomplete="current-password" />
+    <div class="lock-error" id="lock-error" role="alert"></div>
+    <button class="btn primary" id="lock-go" type="submit">Unlock</button>
+    <a href="#" class="lock-forgot" id="lock-forgot">Forgot your passphrase?</a>
+    <div class="lock-help" id="lock-help"></div>
+    <button type="button" class="btn" id="lock-plan" hidden>Open my safety plan</button>
+  </form>
+</div>
+
 <div class="wrap">
   <header class="rise d1">
     <div class="brand">
@@ -562,6 +604,16 @@
     <span id="persist-status"></span>
   </div>
   <div class="row">
+    <div>Lock with a passphrase<small id="lock-setting-detail"></small></div>
+    <button class="btn" id="lock-setting-btn"></button>
+  </div>
+  <div class="lock-options" id="lock-options" hidden>
+    <label>Lock automatically after
+      <select id="autolock"><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="60">1 hour</option><option value="0">Never</option></select></label>
+    <label class="check"><input type="checkbox" id="plan-on-lock" /> Show my safety plan on the lock screen <small>so it's there when you need it most</small></label>
+    <div class="lock-actions"><button class="btn small" id="lock-now">Lock now</button><button class="btn small" id="lock-change">Change passphrase</button></div>
+  </div>
+  <div class="row">
     <div>On-device AI<small id="ai-setting-detail"></small></div>
     <button class="btn" id="ai-setting-btn"></button>
   </div>
@@ -583,6 +635,27 @@
 
 <dialog id="plan" class="wide" aria-labelledby="plan-title">
   <div class="sc-inner" id="plan-inner"></div>
+</dialog>
+
+<dialog id="pass-dialog" aria-labelledby="pass-title">
+  <form id="pass-form" autocomplete="off">
+    <h3 id="pass-title"></h3>
+    <p id="pass-lead"></p>
+    <label class="field" id="pass-current-row">Current passphrase<input type="password" id="pass-current" autocomplete="current-password" /></label>
+    <label class="field" id="pass-new-row">New passphrase<input type="password" id="pass-new" autocomplete="new-password" /></label>
+    <label class="field" id="pass-confirm-row">Type it again<input type="password" id="pass-confirm" autocomplete="new-password" /></label>
+    <label class="check warn-box" id="pass-ack-row"><input type="checkbox" id="pass-ack" /> I understand that if I forget my passphrase, my journal can't be recovered — not by me, and not by anyone else. I'll keep a backup.</label>
+    <div class="lock-error" id="pass-error" role="alert"></div>
+    <div class="buttons"><button type="button" class="btn" id="pass-cancel">Cancel</button><button type="submit" class="btn primary" id="pass-go"></button></div>
+  </form>
+</dialog>
+
+<dialog id="forgot" aria-labelledby="forgot-title">
+  <h3 id="forgot-title">Forgot your passphrase?</h3>
+  <p>Your journal is encrypted with your passphrase, and it isn't stored anywhere — so there's no way to reset it or recover your entries without it. If you have a backup file, you can restore from it after starting over.</p>
+  <p>To start over with an empty journal on this device, type <b>erase</b> below. This permanently deletes everything stored here.</p>
+  <label class="field">Type “erase” to confirm<input type="text" id="erase-confirm" autocomplete="off" /></label>
+  <div class="buttons"><button class="btn" id="forgot-cancel">Keep trying</button><button class="btn danger" id="erase-go" disabled>Erase and start over</button></div>
 </dialog>
 
 <dialog id="confirm-delete">
@@ -681,20 +754,92 @@ async function tx(mode, fn, name = STORE) {
     t.onabort = () => reject(t.error);
   });
 }
-const store = {
-  all: () => tx("readonly", (s) => s.getAll()),
-  get: (date) => tx("readonly", (s) => s.get(date)),
-  put: (entry) => tx("readwrite", (s) => s.put(entry)),
-  remove: (date) => tx("readwrite", (s) => s.delete(date)),
-};
-// The same four operations for the other stores.
+/* ---------- encryption at rest (optional "lock") ----------
+   A random AES-GCM data key encrypts every record. The data key itself is stored only
+   "wrapped" (encrypted) by a key derived from the passphrase with PBKDF2-SHA256, so
+   changing the passphrase never re-encrypts the journal. The passphrase is never stored. */
+const KEY_PATHS = { [STORE]: "date", [SCREENINGS]: "id", [RECAPS]: "week", [VECTORS]: "date", meta: "key" };
+const ALL_STORES = Object.keys(KEY_PATHS);
+const KDF_ITERATIONS = 600000;
+const utf8 = new TextEncoder(), unutf8 = new TextDecoder();
+let dataKey = null;      // while unlocked; null when the lock is off
+let lockSettings = null; // the "lock" record in meta when the lock is on
+
+// Which records get encrypted: everything, except the lock record itself and — if the
+// person chose to — the safety plan, so it can be read from the lock screen.
+function shouldSeal(name, value) {
+  if (!dataKey) return false;
+  if (name !== "meta") return true;
+  return value.key === "safetyPlan" && !lockSettings?.planOnLockScreen;
+}
+async function sealRecord(name, value, key = dataKey) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, utf8.encode(JSON.stringify(value)));
+  return { [KEY_PATHS[name]]: value[KEY_PATHS[name]], sealed: { iv, data } };
+}
+async function openRecord(value, key = dataKey) {
+  if (!value?.sealed) return value;
+  if (!key) throw new Error("Undercurrent is locked");
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: value.sealed.iv }, key, value.sealed.data);
+  return JSON.parse(unutf8.decode(plain));
+}
+
+async function deriveWrappingKey(passphrase, salt, iterations) {
+  const base = await crypto.subtle.importKey("raw", utf8.encode(passphrase.normalize("NFC")), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, base,
+    { name: "AES-GCM", length: 256 }, false, ["wrapKey", "unwrapKey"]);
+}
+async function wrapDataKey(key, passphrase) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const wrapping = await deriveWrappingKey(passphrase, salt, KDF_ITERATIONS);
+  const wrapped = await crypto.subtle.wrapKey("raw", key, wrapping, { name: "AES-GCM", iv });
+  return { salt, iv, iterations: KDF_ITERATIONS, wrapped };
+}
+// Throws if the passphrase is wrong (AES-GCM authentication fails).
+async function unwrapDataKey(w, passphrase) {
+  const wrapping = await deriveWrappingKey(passphrase, w.salt, w.iterations);
+  return crypto.subtle.unwrapKey("raw", w.wrapped, wrapping, { name: "AES-GCM", iv: w.iv },
+    { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+}
+
+const rawAll = (name) => tx("readonly", (s) => s.getAll(), name);
+// Apply many writes and deletes across stores in ONE transaction: all or nothing.
+async function commitAll(puts, deletes = []) {
+  const database = await db();
+  await new Promise((resolve, reject) => {
+    const t = database.transaction(ALL_STORES, "readwrite");
+    for (const [name, value] of puts) t.objectStore(name).put(value);
+    for (const [name, key] of deletes) t.objectStore(name).delete(key);
+    t.oncomplete = resolve;
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+}
+// Rewrite every record (except the lock record) through `transform`, plus extra writes.
+async function rewriteEverything(transform, extraPuts = [], deletes = []) {
+  const puts = [];
+  for (const name of ALL_STORES) {
+    for (const value of await rawAll(name)) {
+      if (name === "meta" && value.key === "lock") continue;
+      puts.push([name, await transform(name, value)]);
+    }
+  }
+  await commitAll([...puts, ...extraPuts], deletes);
+}
+
+// Every store reads and writes through here, so encryption is invisible to the rest of the app.
 const storeOf = (name) => ({
-  all: () => tx("readonly", (s) => s.getAll(), name),
-  get: (key) => tx("readonly", (s) => s.get(key), name),
-  put: (value) => tx("readwrite", (s) => s.put(value), name),
+  all: async () => Promise.all((await rawAll(name)).map((v) => openRecord(v))),
+  get: async (key) => openRecord(await tx("readonly", (s) => s.get(key), name)),
+  put: async (value) => {
+    const stored = shouldSeal(name, value) ? await sealRecord(name, value) : value;
+    return tx("readwrite", (s) => s.put(stored), name);
+  },
   remove: (key) => tx("readwrite", (s) => s.delete(key), name),
   clear: () => tx("readwrite", (s) => s.clear(), name),
 });
+const store = storeOf(STORE);
 const screeningStore = storeOf(SCREENINGS);
 const recapStore = storeOf(RECAPS);
 const vectorStore = storeOf(VECTORS);
@@ -2121,7 +2266,7 @@ const planIsEmpty = () => PLAN_SECTIONS.every(([k]) => !plan.sections[k].length)
 const telHref = (phone) => "tel:" + phone.replace(/[^\d+]/g, "");
 
 function openPlan(edit = false) {
-  renderPlan(edit || planIsEmpty());
+  renderPlan(!document.body.classList.contains("locked") && (edit || planIsEmpty()));
   if (!$("plan").open) $("plan").showModal();
   $("plan-inner").scrollTop = 0; // "Need someone right now?" must always be the first thing in view
 }
@@ -2158,7 +2303,7 @@ function renderPlan(edit) {
     ${sections}
     <div class="buttons">
       ${edit ? `<button type="button" class="btn" id="plan-cancel">Cancel</button><button type="button" class="btn primary" id="plan-save">Save plan</button>`
-             : `<button type="button" class="btn" id="plan-edit">Edit</button><button type="button" class="btn primary" id="plan-close">Close</button>`}
+             : `${document.body.classList.contains("locked") ? "" : `<button type="button" class="btn" id="plan-edit">Edit</button>`}<button type="button" class="btn primary" id="plan-close">Close</button>`}
     </div>`;
   $("plan-inner").dataset.edit = edit ? "1" : "";
   $("plan-inner").scrollTop = 0;
@@ -2214,6 +2359,186 @@ document.addEventListener("click", (e) => {
   openPlan();
 });
 
+/* ---------- lock: turn on/off, unlock, auto-lock ---------- */
+async function enableLock(passphrase) {
+  const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+  const settings = { key: "lock", ...(await wrapDataKey(key, passphrase)), autoLockMinutes: 15, planOnLockScreen: true, createdAt: Date.now() };
+  const previous = { dataKey, lockSettings };
+  dataKey = key; lockSettings = settings; // so shouldSeal() answers for the new state
+  try {
+    await rewriteEverything(async (name, v) => {
+      const plain = await openRecord(v, previous.dataKey);
+      return shouldSeal(name, plain) ? sealRecord(name, plain, key) : plain;
+    }, [["meta", settings]]);
+  } catch (err) {
+    ({ dataKey, lockSettings } = previous);
+    throw err;
+  }
+  channel?.postMessage({ type: "lock-changed" });
+}
+
+async function disableLock(passphrase) {
+  const key = await unwrapDataKey(lockSettings, passphrase); // throws on a wrong passphrase
+  await rewriteEverything((name, v) => openRecord(v, key), [], [["meta", "lock"]]);
+  dataKey = null; lockSettings = null;
+  channel?.postMessage({ type: "lock-changed" });
+}
+
+async function changePassphrase(current, next) {
+  await unwrapDataKey(lockSettings, current);
+  const settings = { ...lockSettings, ...(await wrapDataKey(dataKey, next)) };
+  await commitAll([["meta", settings]]);
+  lockSettings = settings;
+}
+
+async function saveLockSettings(changes) {
+  lockSettings = { ...lockSettings, ...changes };
+  await commitAll([["meta", lockSettings]]);
+  if ("planOnLockScreen" in changes && plan.updatedAt) await metaStore.put(plan); // re-store sealed or readable
+  channel?.postMessage({ type: "lock-settings" });
+}
+
+// Anything written in plain text while the lock was being turned on (e.g. by another tab mid-save) gets sealed now.
+async function resealStrays() {
+  const puts = [];
+  for (const name of ALL_STORES) {
+    for (const v of await rawAll(name)) {
+      if (!v.sealed && shouldSeal(name, v) && !(name === "meta" && v.key === "lock")) puts.push([name, await sealRecord(name, v)]);
+    }
+  }
+  if (puts.length) await commitAll(puts);
+}
+
+async function lockNow() {
+  if (dirty) await saveNow();
+  channel?.postMessage({ type: "lock-now" });
+  location.reload(); // the simplest way to be sure nothing decrypted stays in memory
+}
+
+/* the lock screen */
+async function showLockScreen() {
+  document.body.classList.add("locked");
+  const rawPlan = await tx("readonly", (s) => s.get("safetyPlan"), "meta").catch(() => null);
+  if (rawPlan && !rawPlan.sealed) plan = normalizePlan(rawPlan);
+  $("lock-plan").hidden = !(plan && !planIsEmpty());
+  $("lock-help").innerHTML = `Need someone right now? ${helplineHtml({ compact: true })}`;
+  $("lock-pass").focus();
+}
+
+$("lock-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const pass = $("lock-pass").value;
+  if (!pass) return;
+  $("lock-go").disabled = true;
+  $("lock-go").textContent = "Unlocking…";
+  $("lock-error").textContent = "";
+  try {
+    dataKey = await unwrapDataKey(lockSettings, pass);
+  } catch {
+    $("lock-error").textContent = "That passphrase didn't work. Check caps lock and try again.";
+    $("lock-go").disabled = false;
+    $("lock-go").textContent = "Unlock";
+    $("lock-pass").select();
+    return;
+  }
+  $("lock-pass").value = "";
+  document.body.classList.remove("locked");
+  await resealStrays();
+  await startApp();
+});
+$("lock-plan").addEventListener("click", () => openPlan());
+$("lock-forgot").addEventListener("click", (e) => { e.preventDefault(); $("erase-confirm").value = ""; $("erase-go").disabled = true; $("forgot").showModal(); });
+$("erase-confirm").addEventListener("input", () => { $("erase-go").disabled = $("erase-confirm").value.trim().toLowerCase() !== "erase"; });
+$("forgot-cancel").addEventListener("click", () => $("forgot").close());
+$("erase-go").addEventListener("click", async () => {
+  (await dbPromise)?.close();
+  await new Promise((resolve) => { const r = indexedDB.deleteDatabase(DB_NAME); r.onsuccess = r.onerror = r.onblocked = resolve; });
+  channel?.postMessage({ type: "lock-now" });
+  location.reload();
+});
+
+/* auto-lock after a stretch of inactivity */
+let lastActivity = Date.now();
+for (const ev of ["pointerdown", "keydown", "wheel", "touchstart"]) addEventListener(ev, () => { lastActivity = Date.now(); }, { capture: true, passive: true });
+function checkAutoLock() {
+  const minutes = lockSettings?.autoLockMinutes;
+  if (dataKey && minutes && Date.now() - lastActivity > minutes * 60000) lockNow();
+}
+setInterval(checkAutoLock, 15000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkAutoLock(); });
+
+/* settings and passphrase dialog */
+function renderLockSetting() {
+  const on = !!lockSettings;
+  $("lock-setting-detail").textContent = on
+    ? "On. Your journal is encrypted on this device and needs your passphrase to open."
+    : "Off. Encrypts your journal on this device so it can't be read without your passphrase.";
+  $("lock-setting-btn").textContent = on ? "Turn off" : "Turn on";
+  $("lock-options").hidden = !on;
+  if (on) {
+    $("autolock").value = String(lockSettings.autoLockMinutes ?? 0);
+    $("plan-on-lock").checked = !!lockSettings.planOnLockScreen;
+  }
+}
+
+let passMode = null;
+function openPassDialog(mode) {
+  passMode = mode;
+  const copy = {
+    enable: ["Lock your journal", "Choose a passphrase. A few unrelated words are strong and easy to remember — like “river lantern seven toast”.", "Turn on lock"],
+    change: ["Change your passphrase", "Your journal stays encrypted; only the passphrase changes.", "Change passphrase"],
+    disable: ["Turn off the lock", "Your journal will be stored without encryption on this device.", "Turn off lock"],
+  }[mode];
+  $("pass-title").textContent = copy[0];
+  $("pass-lead").textContent = copy[1];
+  $("pass-go").textContent = copy[2];
+  $("pass-current-row").hidden = mode === "enable";
+  $("pass-new-row").hidden = mode === "disable";
+  $("pass-confirm-row").hidden = mode === "disable";
+  $("pass-ack-row").hidden = mode !== "enable";
+  for (const id of ["pass-current", "pass-new", "pass-confirm"]) $(id).value = "";
+  $("pass-ack").checked = false;
+  $("pass-error").textContent = "";
+  $("pass-go").disabled = false;
+  $("pass-dialog").showModal();
+  (mode === "enable" ? $("pass-new") : $("pass-current")).focus();
+}
+
+$("pass-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const current = $("pass-current").value, next = $("pass-new").value, confirm2 = $("pass-confirm").value;
+  const fail = (msg) => { $("pass-error").textContent = msg; };
+  if (passMode !== "disable") {
+    if (next.length < 8) return fail("Use at least 8 characters — a few words is best.");
+    if (next !== confirm2) return fail("The two passphrases don't match.");
+  }
+  if (passMode === "enable" && !$("pass-ack").checked) return fail("Please confirm you understand a forgotten passphrase can't be recovered.");
+  $("pass-go").disabled = true;
+  const label = $("pass-go").textContent;
+  $("pass-go").textContent = passMode === "change" ? "Changing…" : passMode === "enable" ? "Encrypting your journal…" : "Decrypting your journal…";
+  try {
+    if (dirty) await saveNow();
+    if (passMode === "enable") await enableLock(next);
+    else if (passMode === "change") await changePassphrase(current, next);
+    else await disableLock(current);
+    $("pass-dialog").close();
+    toast({ enable: "Your journal is now locked with your passphrase.", change: "Passphrase changed.", disable: "The lock is off." }[passMode]);
+    renderLockSetting();
+  } catch (err) {
+    console.error(err);
+    fail(err?.name === "OperationError" ? "That current passphrase didn't work." : "Something went wrong: " + (err.message || err));
+  } finally {
+    $("pass-go").disabled = false;
+    $("pass-go").textContent = label;
+  }
+});
+$("pass-cancel").addEventListener("click", () => $("pass-dialog").close());
+$("lock-setting-btn").addEventListener("click", () => openPassDialog(lockSettings ? "disable" : "enable"));
+$("lock-change").addEventListener("click", () => openPassDialog("change"));
+$("lock-now").addEventListener("click", () => lockNow());
+$("autolock").addEventListener("change", (e) => saveLockSettings({ autoLockMinutes: Number(e.target.value) }));
+$("plan-on-lock").addEventListener("change", (e) => saveLockSettings({ planOnLockScreen: e.target.checked }));
+
 /* ---------- your data ---------- */
 async function openSettings() {
   if (dirty) await saveNow();
@@ -2229,6 +2554,7 @@ async function openSettings() {
     ? "The browser won't clear your entries to free up space."
     : "The browser may clear site data when space runs low. Installing the app usually turns this on.";
   renderAiSetting();
+  renderLockSetting();
   $("settings").showModal();
 }
 
@@ -2352,7 +2678,10 @@ window.addEventListener("resize", () => { if (mode === "write") autosize(); });
 
 // Another tab changed something: pick it up, unless we're mid-edit on that day.
 channel?.addEventListener("message", async ({ data }) => {
+  if (data.type === "lock-changed" || data.type === "lock-now") { if (lockSettings || data.type === "lock-changed") location.reload(); return; }
+  if (document.body.classList.contains("locked")) return; // nothing to refresh until unlocked
   if (data.type === "reload") { await loadAll(); openDay(current); updateBanner(); renderHelplines(); return; }
+  if (data.type === "lock-settings") { lockSettings = (await tx("readonly", (s) => s.get("lock"), "meta")) || null; return; }
   if (data.type === "plan") { await loadPlan(); if ($("plan").open && $("plan-inner").dataset.edit !== "1") renderPlan(false); return; }
   if (data.type === "country") { renderHelplines(); return; }
   if (data.type === "screenings") { await loadScreenings(); updateBanner(); if (!$("trends").hidden) renderTrends(); return; }
@@ -2387,7 +2716,7 @@ renderHelplines();
 document.querySelectorAll(".rise").forEach((el) =>
   el.addEventListener("animationend", () => el.classList.remove("rise", "d1", "d2", "d3"), { once: true }));
 
-(async () => {
+async function startApp() {
   try {
     await loadAll();
   } catch (err) {
@@ -2396,6 +2725,16 @@ document.querySelectorAll(".rise").forEach((el) =>
   }
   openDay(todayKey(), { focus: true });
   updateBanner();
+}
+
+(async () => {
+  try {
+    lockSettings = (await tx("readonly", (s) => s.get("lock"), "meta")) || null;
+  } catch (err) {
+    console.error(err);
+  }
+  if (lockSettings) showLockScreen(); // the app starts once the passphrase unwraps the key
+  else startApp();
 })();
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
